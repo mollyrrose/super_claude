@@ -1,113 +1,175 @@
 # super_claude
 
-> Claude Code setup, ami a **Claude Pro / Max előfizetésedet** használja inference-re,
-> kibővítve egy ~165-elemes skill-bundle-lel, automata skill-curate-tel és smart
-> prompt-routerrel. Külön Anthropic / OpenAI API kulcs nem kell az alapfunkciókhoz.
+> Personal Claude Code setup that runs on your **Claude Pro / Max subscription** for inference, extended with a ~165-item skill bundle, automatic self-curate, smart prompt router, multi-tier automatic code review, and a custom statusline. No separate Anthropic or OpenAI API key needed for the core features.
+
+This README covers the full feature catalog of the project. For original Hungarian setup notes see [`hermes-agent/CLAUDE_ELOFIZETES.md`](hermes-agent/CLAUDE_ELOFIZETES.md) and the architecture deep-dive in [`hermes-agent/INTEGRATION_CLAUDE_CODE.md`](hermes-agent/INTEGRATION_CLAUDE_CODE.md).
 
 ---
 
-## Mit tartalmaz a repo
+## Repository layout
 
 ```
-hermes-agent/
-├── claude_code_integration/    ← a tényleges Claude Code integráció (hookok, curator, lifecycle, router)
-├── claude_skills_backup/        ← ~165 skill (Hermes-eredetűek átalakítva + saját kiegészítések)
-├── CLAUDE_ELOFIZETES.md         ← beüzemelési útmutató (Claude Pro/Max OAuth)
-└── INTEGRATION_CLAUDE_CODE.md   ← integrációs architektúra leírás
+super_claude/
+- CLAUDE.md                          (project-level rules, extends the global ~/.claude/CLAUDE.md)
+- README.md                          (this file)
+- LICENSE                            (Apache 2.0, inherited from upstream Hermes)
+- hermes-agent/
+   - claude_code_integration/        (hooks, curator, skill lifecycle, smart router)
+   - claude_skills_backup/           (~165 skills converted to Claude Code format)
+   - CLAUDE_ELOFIZETES.md            (Pro/Max OAuth setup guide, Hungarian)
+   - INTEGRATION_CLAUDE_CODE.md      (architecture writeup)
+   - LICENSE                         (Apache 2.0)
 ```
 
-Az upstream Hermes-runtime összes többi része (agent core, gateway, TUI, web, docker
-stb.) szándékosan **nincs** ebben a repóban — a Claude Code integrációhoz nincs rá
-szükség. Ha az teljes Hermes-fork kell, lásd <https://github.com/nousresearch/hermes-agent>.
+The full upstream Hermes runtime (agent core, gateway, TUI, web, docker, Hermes CLI, ...) is intentionally NOT shipped here -- the Claude integration does not need it. If you want the full fork, see <https://github.com/nousresearch/hermes-agent>.
 
-## Mit tud
+State files (`ruvector.db`, `.hermes_*.json`, `.qrev_auto_state.json`, `.statusline_baselines.json`, `.credentials.json`, `.ecc-session-bridge/`) are gitignored and never reach the repo. See `.gitignore` for the full exclusion list.
 
-- **Automata önTanulás** — a `Stop` hook minden befejezett sessiont queue-be tesz; a
-  következő prompt elején Claude **a saját session-jében** átolvassa, és magas-bizonyosságú,
-  ismétlődő pattern-ekből új skilleket ír közvetlenül `~/.claude/skills/hermes-auto-<slug>/`
-  alá. Külön API-hívás nincs — a Pro/Max előfizetésed fedi a költséget.
-- **Skill-bundle** — ~165 specializált skill: kód-review, build-fixer-ek, design-segédek,
-  domain-tudás (finance, legal, marketing), saját workflow-skillek (qPlan, qRem, qMin,
-  qUpd, qDo, rev, hunt, think, learn, write, …).
-- **Smart prompt router** — minden user-prompt elejére futó deterministic hook, ami a
-  prompt mintázata alapján opcionálisan skill-ajánlást fűz hozzá (build hibák → build-resolver,
-  „review my code" → code-review-expert, stb.). LLM-mentes — szabályalapú.
-- **Skill-lifecycle** — 7 naponta egyszer fut egy deterministic pass, ami 90 coding-day
-  óta nem használt skilleket `~/.claude/skills-archive/` alá mozgat. Bicikli-elv: csak
-  az aktivitásos napok számítanak.
+---
 
-## Telepítés
+## Feature catalog
 
-### Előfeltételek
+### 1. Skill bundle (~165 skills)
 
-1. **Claude Code** telepítve és bejelentkezve:
+Bundled in `hermes-agent/claude_skills_backup/`. After install they land in `~/.claude/skills/hermes-*/` and are callable as slash commands.
+
+Categories: code review (`code-review-and-quality`, `code-review-expert`, `solid`, `karpathy-guidelines`), build / test resolvers (`hermes-debugging-*`), language patterns (TypeScript, Python, Go, Rust, Kotlin, Swift, Dart/Flutter, ...), framework patterns (FastAPI, Django, Laravel, Spring, Quarkus, Nest, Nuxt, ...), domain knowledge (finance, legal, marketing, healthcare HIPAA, e-commerce, ...), workflow skills (`qPlan`, `qRem`, `qMin`, `qUpd`, `qDo`, `qRev`, `rev`, `hunt`, `think`, `learn`, `write`, `read`, `check`, `tw`, ...), creative / design (`hermes-p5js`, `hermes-pixel-art`, `hermes-baoyu-*`, `design`, `compose`, ...), and many more.
+
+### 2. Auto-curate (Pro/Max subscription, no extra API key)
+
+Stop hook records every finished session into `~/.claude/.hermes_curator_queue.json` (instant, free, offline). The next session's UserPromptSubmit hook checks the queue: when >= 3 sessions are pending or >= 7 days have passed since the last drain, it injects an `additionalContext` instructing Claude to silently re-read the queued transcripts, extract high-confidence recurring patterns, and write fresh skills directly under `~/.claude/skills/hermes-auto-<slug>/`. The work runs inside the current Claude session -- your subscription covers it. The reply gets prepended with `- curator: drained N session(s), wrote M auto-skill(s)`.
+
+Same pattern for `/qPlan` runs via the separate `~/.claude/.hermes_qplan_curator_queue.json` queue.
+
+### 3. Smart prompt router
+
+`smart_router_prompt_hook.py` runs on every user prompt and applies deterministic rules. If the prompt looks like a build error, security review request, etc., it appends a relevant skill suggestion as `additionalContext`. Rule-based, no LLM call, costs nothing.
+
+### 4. Skill lifecycle
+
+`skill_lifecycle.py` runs from the UserPromptSubmit hook once every 7 calendar days. It scans `~/.claude/skills/` for skills that haven't been invoked in the last 90 **coding days** (the bicycle principle: only days with real session activity count) and moves them to `~/.claude/skills-archive/`. The list of detected skill invocations comes from a transcript scan that runs after every session in the Stop hook, written into `~/.claude/.hermes_skill_state.json`.
+
+### 5. Multi-tier automatic code review (`/qRev` auto)
+
+Three tiers, all automatic, threshold-driven, no manual prompts:
+
+| Tier | Trigger | Action | Wall-clock |
+|---|---|---|---|
+| 1 -- Static | every Write/Edit | Semgrep if the repo has a `.semgrep.yml` | ~1-3 s, no LLM cost |
+| 2 -- qMin | 50 edits OR 5000 LOC since last review | next prompt: Claude silently runs `/qMin` (5-axis lens) on the uncommitted diff before answering | ~15-60 s, 1 LLM turn |
+| 3 -- qRev | 250 edits OR 25000 LOC since last review (preempts tier 2) | next prompt: Claude silently runs full `/qRev` (qMin + Phase A + 3-pass exhaustive agent fleet) | 15-30 min, subscription-covered |
+
+Threshold overrides via environment variables: `QREV_AUTO_LEVEL` (0/1/2/3), `QREV_AUTO_QMIN_EDITS`, `QREV_AUTO_QMIN_LOC`, `QREV_AUTO_QREV_EDITS`, `QREV_AUTO_QREV_LOC`.
+
+Implementation: `qrev_edit_counter.py` (`PostToolUse` matcher `Write|Edit`) increments per-session counters into `~/.claude/.qrev_auto_state.json` and flips `pending_qmin` / `pending_qrev` at threshold. `qrev_auto_inject.py` (`UserPromptSubmit`) emits the `additionalContext` instruction when a flag is set. `qrev_mark_done.py` is the CLI Claude calls after the auto-review to reset the matching counters.
+
+**Auto-fix** -- `/qMin` and `/qRev` carry a standing pre-approval: after the verdict / synthesis report, Claude immediately starts applying surgical fixes for each P0 -> P1 -> P2 -> P3 finding without waiting for confirmation. Each fix is logged inline as `- fix [P<n>/<source>] <file>:<line>: <what changed>`. Findings that need a real design decision get a `- skip [<source>] <file>:<line>: <reason>` line. Same policy for direct calls and the auto-tier hooks.
+
+The `/qRev` skill itself (`~/.claude/skills/qRev/SKILL.md`) is a fused review that wraps `/qMin` + `/rev exhaustive`. Argument forms:
+
+- `/qRev` -- qMin + Phase A + exhaustive 3-pass on the uncommitted diff
+- `/qRev topic:<name>` -- same but exhaustive depth with agent roster filtered to `security` / `db` / `perf` / `ml` / `tests`
+- `/qRev PR#<n>` / `/qRev branch` / `/qRev full` / `/qRev <path>` / `/qRev fast` -- alternate scopes
+- Case-insensitive: `/qrev`, `/Qrev`, `/QRev`, `/QREV` all route to the same skill.
+
+### 6. Custom statusline (`statusline_with_weekly.js`)
+
+Three half-width progress bars in one line, refreshed every prompt. Layout:
+
+```
+O4.7 2Compact S##...26%full| 5h##...32%full(01:23 r,69%)A| 1w##...12%full(4d5h r,39%)A
+```
+
+- **`O4.7`** -- shortened model label (no `Opus 4.7 (1M context)` clutter).
+- **`2Compact S`** -- session context bar. Shows how close you are to auto-compact (the 16.5% reserved buffer is treated as the danger floor, so 100% on the bar = auto-compact fires now). Threshold colors: green `< 50%`, yellow `< 65%`, orange `< 80%`, blinking red `>= 80%`.
+- **Per-session baseline subtraction** -- at session start (and after `/clear`), the system prompt + skill list takes ~10-15% raw. The statusline subtracts this baseline so your bar starts at 0% and only shows your own context consumption. State per session in `~/.claude/.statusline_baselines.json`. After `/clear` the bar detects the drop and re-baselines automatically.
+- **`5h` and `1w` bars** -- rate-limit consumption with countdown (`HH:MM r` for hour-scale, `Xd Yh r` for day-scale) and a time-proportional reference percentage. A solid up-triangle (green) means you're significantly under-pace (more headroom than the elapsed time would predict). A solid down-triangle (red) means you're over-pace. The tolerance band is `+/- elapsed%/3`, so the arrow fires only when the deviation is significant.
+- **All three bars** share the same color gradient based on used %, including the 5h/1w bars (they used to be fixed blue/orange).
+
+### 7. No-decorative-unicode rule
+
+Global (`~/.claude/CLAUDE.md`) and project (`./CLAUDE.md`) carry a rule against decorative unicode in code, docs, comments, and commit messages: no rightward arrow, checkmark, cross, decorative bullets, stars, or pointing triangles. ASCII (`->`, `[ok]`, `[fail]`, `-`, `*`) is preferred. Windows cp1252 console crashes on these chars and search tools miss them. The rule explicitly allows the statusline's functional UI glyphs (bar fill, pace triangles) because they carry visual state with no plain-text substitute.
+
+---
+
+## Install
+
+### Prerequisites
+
+1. **Claude Code** installed and logged in:
    ```powershell
    npm install -g @anthropic-ai/claude-code
    claude /login
    ```
-   A login után létrejön `~/.claude/.credentials.json` (Windows-on:
-   `C:\Users\<user>\.claude\.credentials.json`).
+   This creates `~/.claude/.credentials.json` (on Windows: `C:\Users\<user>\.claude\.credentials.json`).
 
-2. **Python 3.10+** és `pip`.
+2. **Python 3.10+** with `pip` (used for the hook scripts).
 
-### Lépések
+3. Optional: **Node.js** if you want the JS statusline (most setups already have it via Claude Code itself).
+
+### Steps
 
 ```powershell
-# 1. Klónozd ide vagy bármilyen állandó helyre
+# 1. Clone wherever you want it to live permanently
 git clone git@github.com:mollyrrose/super_claude.git D:\projects\super_claude
 cd D:\projects\super_claude
 
-# 2. Telepítsd a skill bundle-t és kapcsold be a hookokat
+# 2. Install the skill bundle and wire the hooks
 python hermes-agent\claude_code_integration\install_into_claude_code.py
 ```
 
-Az installer:
-- bemásolja a `claude_skills_backup/*` skilleket a `~/.claude/skills/hermes-*` alá,
-- bedrótozza a `Stop`, `PreCompact`, `UserPromptSubmit` hookokat a `~/.claude/settings.json`-be,
-- létrehoz egy üres `~/.claude/.hermes_curator_queue.json` queue-t.
+The installer:
+- copies `claude_skills_backup/*` skills into `~/.claude/skills/hermes-*/`
+- wires the `Stop`, `PreCompact`, `UserPromptSubmit`, `PostToolUse`, `SessionEnd` hooks into `~/.claude/settings.json`
+- creates the empty queue files (`~/.claude/.hermes_curator_queue.json`, `~/.claude/.hermes_qplan_curator_queue.json`, `~/.claude/.qrev_auto_state.json`)
 
-Ha kézzel akarod beállítani, a wiring példa a [`hermes-agent/INTEGRATION_CLAUDE_CODE.md`](hermes-agent/INTEGRATION_CLAUDE_CODE.md) végén van.
+For manual wiring see the architecture writeup at [`hermes-agent/INTEGRATION_CLAUDE_CODE.md`](hermes-agent/INTEGRATION_CLAUDE_CODE.md).
 
-### Ellenőrzés
+### Verification
 
 ```powershell
 claude --version
-# Indíts egy Claude session-t, futtass egy /qRem vagy bármelyik hermes-* parancsot.
+# Start a Claude session. Try /qRem, any /hermes-* skill, /qRev, etc.
 ```
 
-## Hogyan működik az auto-curate (röviden)
+After the install, your `~/.claude/settings.json` `hooks` block should look like (paths normalized):
 
-Részletes leírás: [`hermes-agent/INTEGRATION_CLAUDE_CODE.md`](hermes-agent/INTEGRATION_CLAUDE_CODE.md).
+```jsonc
+"hooks": {
+  "Stop":              [ ... curator_stop_hook.py ... ],
+  "PreCompact":        [ ... curator_precompact_hook.py ... ],
+  "UserPromptSubmit":  [ ... curator_prompt_hook.py, smart_router_prompt_hook.py, context_budget_gate.py, qrev_auto_inject.py ... ],
+  "PostToolUse":       [ { "matcher": "Write|Edit", "hooks": [ ... semgrep_postedit_hook.py, qrev_edit_counter.py ... ] } ],
+  "SessionEnd":        [ ... rev_learn_sessionend.py ... ]
+}
+```
 
-1. **Stop hook** (session vége): csak queue-bejegyzést ír — instant, ingyen, offline.
-2. **UserPromptSubmit hook** (következő prompt eleje): ha a queue threshold-ja telve
-   (alapból 3 session vagy 7 nap), utasítást told Claude-nak a `additionalContext`-en
-   keresztül: „A user kérése előtt csendben curate-eld a queue-t."
-3. **Claude saját** a saját session-jében átolvassa a régi transcripteket, és magas-bizonyosságú,
-   legalább 2 sessionben ismétlődő, generikus pattern-eket talál → `~/.claude/skills/hermes-auto-<slug>/SKILL.md`
-   alá ír. Konzervatív: zero new skill egy queue-ból a default elvárt eredmény.
-4. A válasz tetején egy státusz-sor jelzi: `· curator: drained N session(s), wrote M auto-skill(s)`,
-   utána normálisan válaszol a user promptjára.
+---
 
-Az új skillek **azonnal** elérhetőek slash-parancsként.
+## Configuration
 
-## Konfigurálás
+The repo stores no secrets. Hooks use the Claude OAuth token (`~/.claude/.credentials.json`) created by `claude /login`. **Never** commit `.credentials.json` or any `.hermes_*.json` / `.qrev_auto_state.json` / `.statusline_baselines.json` state files -- the bundled `.gitignore` already excludes them.
 
-A repo nem tárol semmilyen titkos kulcsot. A `claude_code_integration/` hookok a Claude OAuth
-tokent használják (`~/.claude/.credentials.json`), amit a `claude /login` hoz létre. **Ne**
-commit-old soha a `.credentials.json`-t, sem a `.hermes_*.json` állapot-fájlokat — a
-beépített `.gitignore` ezeket kizárja.
+If you use other OpenAI / Anthropic / GitHub keys in custom skills, put them in `~/.claude/settings.json` under the `env` field, NOT in the repo. The hook scripts read env vars at startup so changes take effect on the next `Write/Edit` or prompt submit, no restart needed.
 
-Ha más OpenAI / Anthropic / GitHub kulcsokat is használsz Claude-skillekben, a `~/.claude/settings.json`
-`env` mezőjében tárold, **NEM** a repóban.
+Override defaults for the auto-review tiers in the same `env` block:
 
-## Licenc
+```jsonc
+"env": {
+  "QREV_AUTO_LEVEL":      "3",       // 0=off, 1=static only, 2=+qMin, 3=+qRev
+  "QREV_AUTO_QMIN_EDITS": "50",
+  "QREV_AUTO_QMIN_LOC":   "5000",
+  "QREV_AUTO_QREV_EDITS": "250",
+  "QREV_AUTO_QREV_LOC":   "25000"
+}
+```
 
-- Az upstream Hermes-eredetű kód (`hermes-agent/claude_code_integration/` és a
-  `claude_skills_backup/hermes-*` skillek) az eredeti Apache 2.0 licensze alatt
-  marad — lásd [`hermes-agent/LICENSE`](hermes-agent/LICENSE).
-- A repo-specifikus kiegészítések (ez a README, a fork-szintű módosítások)
-  ugyanúgy Apache 2.0.
+---
+
+## License
+
+- Upstream Hermes-derived code (`hermes-agent/claude_code_integration/` and the `claude_skills_backup/hermes-*` skills) stays under the original Apache 2.0 license -- see [`hermes-agent/LICENSE`](hermes-agent/LICENSE).
+- The repo-specific additions (this README, the auto-review tier, the custom statusline, the project CLAUDE.md, the q-skills like `qRev`) are released under the same Apache 2.0.
 
 ## Upstream
 
