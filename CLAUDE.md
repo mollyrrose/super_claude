@@ -12,11 +12,23 @@ This rule mirrors the global rule and is restated here so it's visible inside th
 
 Don't put characters like the rightward arrow (U+2192), checkmark (U+2713/U+2714), cross (U+2717/U+2718), bullets (U+2022/U+25CF/U+25E6), stars (U+2605/U+2606) or pointing triangles (U+25B6/U+25BC) into source files, markdown, comments, commit messages, or PR bodies.
 
+The same rule covers **emoji-style** decorative glyphs and any visually similar character. Forbidden emoji (non-exhaustive — the principle covers anything in the same family):
+- check / OK: `✅` (U+2705), `✔️` (U+2714 U+FE0F), `☑` (U+2611)
+- fail / wrong: `❌` (U+274C), `❎` (U+274E)
+- warning / alert: `⚠️` (U+26A0), `⛔` (U+26D4), `🚨` (U+1F6A8)
+- status dots: `🟢🔴🟡🔵` (U+1F7E2..U+1F7E6) and the larger circle family
+- thumbs / pointing hands: `👍👎` (U+1F44D/U+1F44E), `👉👈👆👇`
+- decoration: `✨` (U+2728), `⭐🌟`, `🔥` (U+1F525), `🚀` (U+1F680), `🎉🎊`, `💯`
+- notes / ideas: `💡` (U+1F4A1), `📝` (U+1F4DD), `📌` (U+1F4CC), `📚`, `📋`
+
+Rule of thumb: if a character is outside Basic Latin / Latin-1 and isn't on the functional allowlist below, treat it as decoration and drop it.
+
 Reasons:
 - Windows cp1252 console crashes on emit (`UnicodeEncodeError`); test smoke scripts have already hit this.
 - ripgrep / grep with default ASCII expectations miss them.
 - They render differently across terminals, editors, and chat tools.
-- They add no information vs plain ASCII.
+- Emoji especially blow up log files, JSONL session captures, and any tool that assumes single-byte text.
+- They add no information vs plain ASCII (`[ok]`, `[fail]`, `[warn]`, `note:` carry the same meaning and grep cleanly).
 
 ASCII equivalents:
 - arrow: `->`
