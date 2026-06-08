@@ -58,6 +58,28 @@ Changes to these scripts should:
 2. Exit 0 by default; reserve non-zero for genuinely blocking conditions.
 3. Be tested with the matching `_smoketest.py` next door before wiring.
 
+## Shared TODO files — per-window entries only
+
+If a project has a shared `TODO.md` / `todo.md` / `tot.md`, multiple Claude Code windows (different branches, different worktrees, different sessions) may all read and write the same file. **Don't** write notes like "NOT this window (other branch, other window)" or "ignore — different session" into shared TODO files. Those notes are meaningless to the other window reading the same file, and they collide.
+
+Instead, every TODO entry you create must be scoped to a **window identifier** so multiple windows can share one file without confusion:
+
+- Pick a short window code at the top of the session and reuse it for every entry that session writes. Examples: `[w-main]`, `[w-feat-auth]`, `[w-2026-06-08-a]`. The codes should be branch-derived or session-derived, not human-readable invective.
+- Format each entry as: `- [w-CODE] YYYY-MM-DD — task description`. Always include the date the entry was added.
+- When closing or updating an entry, only touch entries whose `[w-CODE]` matches the current session. Don't delete or rewrite another window's entries.
+- If you already wrote bare "this window" notes into a shared TODO file in this session, rewrite them in the `[w-CODE] YYYY-MM-DD —` form before moving on.
+
+This rule applies to any shared list file the project uses for cross-session task tracking — not just `TODO.md`. If unsure whether a file is shared, treat it as shared.
+
+## Don't create directories outside the project root, and don't sibling-copy the project folder
+
+When working in a project:
+
+- Don't create new directories outside the project root. Scratch files, experiments, backups, and intermediate artifacts all belong inside the project (typically under a gitignored `.scratch/`, `tmp/`, or similar) — not in the parent directory, not in `~`, not in `/tmp`.
+- Don't make sibling copies of the project folder with a suffix or prefix. If the project is `myproject`, do not create `myproject_s`, `myproject_2`, `myproject_backup`, `myproject-old`, `myproject.bak`, `copy_of_myproject`, or any similar near-duplicate next to it. These break tooling that walks the parent directory, confuse the user about which copy is canonical, and accumulate stale state.
+- If you need an isolated copy for an experiment, use a **git branch** or **git worktree** inside the project (or under a designated worktree root), not a directory copy. If you need a backup before a destructive operation, commit to a branch first.
+- If the user explicitly asks for a sibling copy, confirm the exact path and reason before creating it.
+
 ## State files (gitignored, don't commit)
 
 - `~/.claude/.hermes_curator_queue.json`, `.hermes_curator_state.json` — curator queue.
