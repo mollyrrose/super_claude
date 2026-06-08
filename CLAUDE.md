@@ -38,7 +38,7 @@ ASCII equivalents:
 - note: `[i]` or `note:`
 
 Exceptions that ARE allowed because they're functional, not decorative:
-- statusline progress-bar glyphs `U+2588 U+2591` and pace arrows `U+25B2 U+25BC` in `~/.claude/scripts/statusline_with_weekly.js` — that's a UI surface, the chars carry visual state with no plain-text substitute.
+- statusline progress-bar glyphs `U+2588 U+2591` and pace arrows `U+25B2 U+25BC` in `scripts/statusline_with_weekly.js` (installed to `~/.claude/scripts/statusline_with_weekly.js`) — that's a UI surface, the chars carry visual state with no plain-text substitute.
 - em-dash `U+2014` in prose, because plain `--` collides with CLI flag syntax.
 
 When in doubt: if removing the character wouldn't reduce the meaning a plain-text reader picks up, the character is decoration and shouldn't be there.

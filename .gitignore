@@ -38,6 +38,9 @@ hermes-agent.bak.*/
 # ---------- top-level junk ----------
 /ruvector.db
 
+# ---------- per-project Claude Code harness state ----------
+/.claude/
+
 # ---------- hermes-agent: drop everything except claude_code_integration,
 # claude_skills_backup, two docs, and LICENSE ----------
 /hermes-agent/.git/

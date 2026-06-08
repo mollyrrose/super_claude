@@ -13,6 +13,8 @@ super_claude/
 - CLAUDE.md                          (project-level rules, extends the global ~/.claude/CLAUDE.md)
 - README.md                          (this file)
 - LICENSE                            (Apache 2.0, inherited from upstream Hermes)
+- scripts/
+   - statusline_with_weekly.js       (custom statusline, install to ~/.claude/scripts/)
 - hermes-agent/
    - claude_code_integration/        (hooks, curator, skill lifecycle, smart router)
    - claude_skills_backup/           (~165 skills converted to Claude Code format)
@@ -85,6 +87,20 @@ O4.7 2Compact S##...26%full| 5h##...32%full(01:23 r,69%)A| 1w##...12%full(4d5h r
 - **Per-session baseline subtraction** -- at session start (and after `/clear`), the system prompt + skill list takes ~10-15% raw. The statusline subtracts this baseline so your bar starts at 0% and only shows your own context consumption. State per session in `~/.claude/.statusline_baselines.json`. After `/clear` the bar detects the drop and re-baselines automatically.
 - **`5h` and `1w` bars** -- rate-limit consumption with countdown (`HH:MM r` for hour-scale, `Xd Yh r` for day-scale) and a time-proportional reference percentage. A solid up-triangle (green) means you're significantly under-pace (more headroom than the elapsed time would predict). A solid down-triangle (red) means you're over-pace. The tolerance band is `+/- elapsed%/3`, so the arrow fires only when the deviation is significant.
 - **All three bars** share the same color gradient based on used %, including the 5h/1w bars (they used to be fixed blue/orange).
+
+**Source in this repo**: [`scripts/statusline_with_weekly.js`](scripts/statusline_with_weekly.js). Install by copying (or symlinking) it to `~/.claude/scripts/statusline_with_weekly.js`, then wire it as the statusline in `~/.claude/settings.json` (`"statusLine": { "type": "command", "command": "node ~/.claude/scripts/statusline_with_weekly.js" }`).
+
+PowerShell install:
+```powershell
+New-Item -ItemType Directory -Force -Path "$HOME\.claude\scripts" | Out-Null
+Copy-Item .\scripts\statusline_with_weekly.js "$HOME\.claude\scripts\statusline_with_weekly.js" -Force
+```
+
+Bash / WSL install:
+```bash
+mkdir -p ~/.claude/scripts
+cp scripts/statusline_with_weekly.js ~/.claude/scripts/statusline_with_weekly.js
+```
 
 ### 7. No-decorative-unicode rule
 
