@@ -13,6 +13,8 @@ super_claude/
 - CLAUDE.md                          (project-level rules, extends the global ~/.claude/CLAUDE.md)
 - README.md                          (this file)
 - LICENSE                            (Apache 2.0, inherited from upstream Hermes)
+- home_dotclaude/
+   - CLAUDE.md                       (versioned mirror of ~/.claude/CLAUDE.md, the global rules)
 - scripts/
    - statusline_with_weekly.js       (custom statusline, install to ~/.claude/scripts/)
 - hermes-agent/
