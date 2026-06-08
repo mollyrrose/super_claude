@@ -41,6 +41,15 @@ hermes-agent.bak.*/
 # ---------- per-project Claude Code harness state ----------
 /.claude/
 
+# ---------- git worktree checkouts ----------
+# Linked worktrees live under .worktrees/<branch>/ — they're independent
+# checked-out trees of the same repo, not files we want to track from the
+# main tree's perspective. git already special-cases linked worktrees so
+# their internals are not staged here, but the directory itself plus any
+# per-tree caches (node_modules, .semgrep_cache, etc.) should not show as
+# untracked.
+/.worktrees/
+
 # ---------- hermes-agent: drop everything except claude_code_integration,
 # claude_skills_backup, two docs, and LICENSE ----------
 /hermes-agent/.git/

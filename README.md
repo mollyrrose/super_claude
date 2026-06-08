@@ -106,6 +106,42 @@ cp scripts/statusline_with_weekly.js ~/.claude/scripts/statusline_with_weekly.js
 
 Global (`~/.claude/CLAUDE.md`) and project (`./CLAUDE.md`) carry a rule against decorative unicode in code, docs, comments, and commit messages: no rightward arrow, checkmark, cross, decorative bullets, stars, or pointing triangles. ASCII (`->`, `[ok]`, `[fail]`, `-`, `*`) is preferred. Windows cp1252 console crashes on these chars and search tools miss them. The rule explicitly allows the statusline's functional UI glyphs (bar fill, pace triangles) because they carry visual state with no plain-text substitute.
 
+### 8. Dual-window workflow (`.worktrees/`)
+
+Two Claude Code windows on the same project but on **different branches** simultaneously, without working-tree thrashing. Uses `git worktree`: one `.git` directory backs N independent checked-out trees, each on its own branch.
+
+Canonical layout — linked worktrees live under `.worktrees/<branch>/` inside the project, gitignored:
+
+```powershell
+# one-time, from the main tree
+git worktree add .worktrees/feat-x -b feat-x          # new branch
+git worktree add .worktrees/feat-x feat-x             # existing branch
+
+# in a fresh Claude window
+cd D:\projects\super_claude\.worktrees\feat-x
+claude
+
+# cleanup when the branch is merged or abandoned
+git worktree remove .worktrees/feat-x
+git branch -d feat-x
+```
+
+Why it's safe to run two windows simultaneously: an audit of the hook layer confirmed that all per-session state files (`~/.claude/.qrev_auto_state.json`, `.hermes_curator_queue.json`, `.statusline_baselines.json`, `.ecc-session-bridge/`, semgrep findings under each tree's local `.claude/review-log/`) are keyed by `session_id`, not by working-directory path. Two concurrent windows get two distinct session IDs and never collide. Each worktree gets its own `.claude/settings.local.json` — you'll see fresh permission prompts the first time you do something in the new tree; that's expected.
+
+For shared `TODO.md` / `tot.md` files that both windows may read, see the per-window `[w-...]` identifier rule plus the `pid host start hb` liveness protocol in [`CLAUDE.md`](CLAUDE.md). A returning window can deterministically tell whether the original author is still alive (so the task is taken) or dead (so the task can be claimed).
+
+### 9. `qPlan` panel critic — multi-agent planning fleet
+
+`qPlan` is an author↔critic iteration loop that deepens a plan via a guaranteed-terminating ledger + tier-rubric. Original v1 had two critic providers: same-session Claude, or a cross-model OpenAI critic via `~/.claude/skills/qPlan/scripts/openai_critic.py`.
+
+The new default is **`critic_provider: panel`**: the single critic turn becomes a parallel fan-out across a curated set of planning lenses (requirements / architecture / business / spec / estimation / risk / openai), each one an independent agent invocation that returns the same `{verdict, suggestions[]}` JSON the loop already understands. The merge step de-dupes via the existing ledger semantic-match and tags each surviving suggestion with `source_lens` for the audit trail.
+
+This is the same structural move `/rev` made for code review (~12-15 specialist agents in parallel with skill bundles). The author↔critic outer loop, the materiality ledger, the tier rubric, and the termination conditions (`phase_a_converged`, `verdict_converged`, `no_progress >= K`, `hard_cap_rounds`) are unchanged — the panel only changes *what counts as a critic turn*.
+
+Backwards-compat: `critic_provider: claude` and `critic_provider: openai` keep v1 single-critic behavior verbatim.
+
+See [`hermes-agent/claude_skills_backup/qPlan/SKILL.md`](hermes-agent/claude_skills_backup/qPlan/SKILL.md) for the full configuration block and the lens roster.
+
 ---
 
 ## Install
