@@ -46,16 +46,35 @@ if absent:
 critic_provider: panel         # panel | claude | openai
                                # panel (NEW DEFAULT) = multi-lens critic fleet
                                # claude / openai = v1 single-critic backwards-compat
-panel_lenses:                  # only consulted when critic_provider == panel
-  - requirements
-  - architecture
-  - business
-  - spec
-  - estimation
-  - risk
-  - openai                     # cross-model voice; present by default
+panel_lenses:                  # max-mode default — all 22 lenses on
+  # ----- 15 installed-skill lenses -----
+  - requirements               # requirements-analyst + ask-questions-if-underspecified
+  - architecture               # system/backend/frontend-architect + sc:design + oc-*
+  - business                   # business-panel-experts + sc:business-panel
+  - spec                       # sc:spec-panel
+  - estimation                 # sc:estimate + sc:workflow + sc:task
+  - risk                       # root-cause-analyst + sc:reflect + hermes-systematic-debugging
+  - brainstorm                 # sc:brainstorm + brainstorming + hermes-ideation + think
+  - research                   # learn + sc:research + deep-research-agent
+  - prd                        # ecc:plan-prd + ecc:prp-prd + oc-to-prd
+  - orchestration              # ecc:plan-orchestrate + ecc:multi-plan + hermes-writing-plans + ecc:gan-planner
+  - pragmatism                 # karpathy-guidelines
+  - spike                      # hermes-spike
+  - decomposition              # oc-to-issues
+  - socratic                   # socratic-mentor (questions, not assertions)
+  - openai                     # cross-model voice via openai_critic.py
+  # ----- 7 research-derived lenses (2024-2026 multi-agent planning research) -----
+  - spec-conformance           # MAST: drift vs original ask (21% of multi-agent failures)
+  - executable-check           # LLM-Modulo: cheapest thing actually runnable
+  - premortem                  # "Could you be wrong" + failure-narrative form
+  - test-contract              # MetaGPT QA: acceptance tests pre-implementation
+  - drift-anchor               # Counter multi-round debate drift (round-3+ only)
+  - pareto-variants            # GEPA: variants on different axes (Phase A only)
+  - bias-audit                 # Audit ledger for momentum / suggester-preference (round-4+ only)
 panel_parallel: true           # fire lenses in parallel via Agent tool
-panel_min_lenses: 3            # below this after mute heuristics → config error
+panel_min_lenses: 7            # below this after mute heuristics → config error
+panel_bias_injections: true    # CoVe + negative-constraint + "could you be wrong"
+                               # applied to every lens prompt by the orchestrator
 openai_backend: api            # api | browser (browser is a stub in v1)
 model: <provider default>      # claude: current session; openai: gpt-4o
 max_concept_rounds: 8          # Phase A cap
@@ -70,13 +89,42 @@ critic_prefix:  "Erről mit gondolsz? Hol javítanád?:"
 silently fall back to `claude`, because the whole point of provider
 comparison is to keep them distinguishable.
 
-`critic_provider: panel` is the new default. It runs the lens roster in
-`references/panel-prompts.md` as parallel critic voices, merges their
-suggestions through the same semantic-ledger match the v1 loop already
-uses, and assigns each surviving suggestion a `source_lens` field for the
-audit trail. The outer author↔critic state machine — ledger, tier rubric,
-no_progress counter, termination conditions — is unchanged. Only what
-counts as a "critic turn" expanded.
+`critic_provider: panel` is the default and runs in **max mode**: all 22
+lenses from `references/panel-prompts.md` are active by default. 15 of them
+come from the installed planning-skill catalog (Claude built-in agents,
+SuperClaude `sc:`, ECC `ecc:`, OpenClaw `oc-`, Hermes `hermes-`, plus the
+OpenAI cross-model critic). 7 are new lenses derived from 2024-2026 multi-
+agent planning research:
+
+- **`spec-conformance`** (MAST taxonomy) — drift vs original ask, the
+  single largest under-served multi-agent failure bucket (21.3% of
+  failures across 1,600+ traces).
+- **`executable-check`** (LLM-Modulo) — what's the cheapest thing actually
+  runnable to falsify the plan? Pure-LLM verification is unreliable past
+  a certain depth.
+- **`premortem`** ("Could you be wrong" debias) — imagine the plan failed
+  in 3 months; write the postmortem; what plan change today prevents it?
+- **`test-contract`** (MetaGPT QA) — write acceptance tests pre-
+  implementation; MetaGPT hits 85.9% Pass@1 partly because of this.
+- **`drift-anchor`** (Problem Drift) — counter multi-round debate drift
+  (debates drift off-topic around round 3 without an anchor).
+- **`pareto-variants`** (GEPA) — produce 2-3 plan variants on different
+  axes; counter premature convergence on a single "best" plan.
+- **`bias-audit`** (cognitive bias research) — audit the ledger for
+  momentum / suggester-preference / sunk-cost contamination.
+
+The panel additionally applies **three cross-cutting bias injections** to
+every lens prompt: (a) Chain-of-Verification with independent answering,
+50-70% hallucination reduction; (b) negative-constraint phrasing
+(Constitutional AI pattern, harder to game than positive preferences);
+(c) "Could you be wrong?" metacognitive prompt before final verdict. And
+the orchestrator appends an **anti-overlap clause** to every lens spawn,
+naming what the adjacent lenses cover (Anthropic multi-agent research
+playbook).
+
+The outer author↔critic state machine — ledger, tier rubric, no_progress
+counter, termination conditions — is unchanged. Only what counts as a
+"critic turn" expanded.
 
 `critic_provider: claude` and `critic_provider: openai` keep the v1
 single-critic behavior verbatim. Use them when you want to reproduce a
@@ -239,15 +287,34 @@ termination guarantees.
 
 3. **Fire lenses in parallel.** With `panel_parallel: true` (default), send
    all lens invocations in a single tool-call batch so they run
-   concurrently:
+   concurrently. For each lens, the orchestrator constructs the prompt as
+   four blocks in this order:
+
+   a. **Cross-cutting bias injections** (verbatim from
+      `references/panel-prompts.md` § "Cross-cutting bias injections"):
+      Chain-of-Verification, negative-constraint phrasing, "Could you be
+      wrong?" metacognitive check. These three apply to EVERY lens; do
+      not skip.
+   b. **Per-lens body** (verbatim from the corresponding section of
+      `references/panel-prompts.md`).
+   c. **Anti-overlap clause** (verbatim from
+      `references/panel-prompts.md` § "Anti-overlap boundary clauses"),
+      with the list of other-lens names + 1-line summaries filled in
+      from the active roster.
+   d. **Task + plan + ledger payload** as input to the lens.
+
+   Then dispatch:
    - For lenses backed by an `Agent`: call `Agent` with the corresponding
-     `subagent_type` and the lens prompt from `panel-prompts.md` as the
-     system-prompt fragment, plus the task, plan, and ledger as input.
+     `subagent_type`.
    - For lenses backed by skills (e.g. `sc:spec-panel`, `sc:estimate`):
-     inline the lens prompt as the system fragment and call the skill via
-     `Skill(...)` (or, if the skill doesn't support a one-shot critic
-     contract, drive a sub-turn with the same prompt directly).
-   - For `openai`: `bash scripts/openai_critic.py` exactly as in v1.
+     call the skill via `Skill(...)` with the constructed prompt as
+     args, or drive a sub-turn with the prompt directly if the skill
+     doesn't support a one-shot critic contract.
+   - For `openai`: `bash scripts/openai_critic.py` exactly as in v1
+     (the cross-cutting injections are already baked into the openai
+     critic's own prompt; do not double-inject).
+   - For the 7 inline lenses (#16-22): inline the constructed prompt as
+     a sub-turn in the qPlan run, since no installed skill backs them.
 
 4. **Per-lens JSON.** Each lens returns the contract from
    `panel-prompts.md`:
