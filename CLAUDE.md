@@ -62,12 +62,22 @@ Changes to these scripts should:
 
 If a project has a shared `TODO.md` / `todo.md` / `tot.md`, multiple Claude Code windows (different branches, different worktrees, different sessions) may all read and write the same file. **Don't** write notes like "NOT this window (other branch, other window)" or "ignore — different session" into shared TODO files. Those notes are meaningless to the other window reading the same file, and they collide.
 
-Instead, every TODO entry you create must be scoped to a **window identifier** so multiple windows can share one file without confusion:
+Instead, every TODO entry you create must be scoped to a **window identifier** that is unique to *this specific window*, not just to the branch. Two Claude Code windows can be open on the same branch at the same time, so the branch name alone is not enough — the identifier has to disambiguate window-from-window.
 
-- Pick a short window code at the top of the session and reuse it for every entry that session writes. Examples: `[w-main]`, `[w-feat-auth]`, `[w-2026-06-08-a]`. The codes should be branch-derived or session-derived, not human-readable invective.
-- Format each entry as: `- [w-CODE] YYYY-MM-DD — task description`. Always include the date the entry was added.
-- When closing or updating an entry, only touch entries whose `[w-CODE]` matches the current session. Don't delete or rewrite another window's entries.
-- If you already wrote bare "this window" notes into a shared TODO file in this session, rewrite them in the `[w-CODE] YYYY-MM-DD —` form before moving on.
+How to construct the window identifier (pick the first option that's available):
+
+1. **Session ID**: if `$CLAUDE_SESSION_ID` (or equivalent harness-provided session token) is set, use its first 6 hex chars. Format: `[w-<branch>-<sessid6>]`, e.g. `[w-main-a1b2c3]`.
+2. **PPID-derived**: if no session ID is exposed, take the parent terminal PID and use the last 4–6 digits. Format: `[w-<branch>-pid<ppid>]`, e.g. `[w-feat-auth-pid41822]`.
+3. **Timestamp + random**: if neither is available, generate a short tag from session start time plus 3 random hex chars. Format: `[w-<branch>-<YYMMDD-HHMM>-<rand3>]`, e.g. `[w-main-260608-1742-f9c]`.
+
+Whichever you pick, fix it at the start of the session and reuse the **exact same identifier** for every entry you write that session — don't regenerate it per entry, and don't change format mid-session.
+
+Then:
+
+- Format each entry as: `- [w-...] YYYY-MM-DD — task description`. Always include the date the entry was added.
+- When closing or updating an entry, only touch entries whose `[w-...]` matches the current window's identifier. Don't delete or rewrite another window's entries, even if they're on the same branch.
+- If you already wrote bare "this window" notes into a shared TODO file in this session, rewrite them in the `[w-...] YYYY-MM-DD —` form before moving on.
+- Record the chosen window identifier somewhere reproducible (e.g. at the top of the TODO file as a hidden HTML comment `<!-- window: w-main-a1b2c3 started 2026-06-08 -->`) so a returning session can recover it instead of inventing a new one.
 
 This rule applies to any shared list file the project uses for cross-session task tracking — not just `TODO.md`. If unsure whether a file is shared, treat it as shared.
 
