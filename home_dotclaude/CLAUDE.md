@@ -149,6 +149,55 @@ When you read an entry belonging to a different `[w-...]` than your own, decide 
 
 This protocol applies to any shared list file the project uses for cross-session task tracking, not just `TODO.md`. If unsure whether a file is shared, treat it as shared.
 
+## AGENTS.md handling (DOX framework)
+
+If a project contains one or more `AGENTS.md` files, treat them as **binding work contracts** for their subtree, alongside any `CLAUDE.md`. Claude Code does not auto-load `AGENTS.md`, so you must walk and read them manually. Adapted from the DOX framework (https://github.com/agent0ai/dox).
+
+### Before editing
+
+1. Read the root `AGENTS.md` if it exists.
+2. For each file or folder you expect to touch, walk from the repository root down to the target path.
+3. Read every `AGENTS.md` found along that route. If a parent `AGENTS.md` indexes a child `AGENTS.md` whose scope contains the target, follow the index and read the child too.
+4. Use the **nearest** `AGENTS.md` as the local contract; parent docs supply broader rules.
+5. On conflict, the closer doc wins for local details, but no child doc may weaken a parent rule, the global rules in this file, or a project-level `CLAUDE.md`.
+6. Don't rely on memory — re-read the applicable chain in the current session before editing.
+
+If both `CLAUDE.md` and `AGENTS.md` exist in the same scope, treat them as additive: `CLAUDE.md` is Claude-specific, `AGENTS.md` applies to any agent including Claude. On direct conflict between them, ask the user before acting.
+
+### After editing — DOX pass
+
+Every meaningful change requires a DOX pass before the task is done. Update the **closest owning** `AGENTS.md` when a change affects:
+
+- purpose, scope, ownership, or responsibilities
+- durable structure, contracts, workflows, or operating rules
+- required inputs, outputs, permissions, constraints, side effects, or artifacts
+- user preferences about behavior, communication, process, or quality
+- creation, deletion, move, rename, or Child DOX Index contents of any `AGENTS.md`
+
+Also update parent docs when parent-level structure or child index changes, and child docs when a parent change alters local rules. Remove stale or contradictory text immediately. Edits that don't change behavior or contracts may leave docs unchanged, but you still do the pass and report it.
+
+### Creating a child AGENTS.md
+
+Create one when a folder becomes a durable boundary with its own purpose, rules, responsibilities, workflow, materials, or quality standards. Default section order:
+
+- Purpose
+- Ownership
+- Local Contracts
+- Work Guidance
+- Verification
+- Child DOX Index
+
+Leave Work Guidance and Verification empty when no concrete standards or checks exist yet — don't invent them. Each parent must explain what its direct children cover and what stays owned by the parent. Closer docs are more specific and operational; parent docs hold broad rules.
+
+### Closeout
+
+1. Re-check changed paths against the DOX chain.
+2. Update nearest owning docs and any affected parents or children.
+3. Refresh every affected Child DOX Index.
+4. Remove stale or contradictory text.
+5. Run existing verification when relevant.
+6. Briefly note any docs intentionally left unchanged and why.
+
 ## No decorative unicode in code or docs
 
 Don't write characters like `->` rendered as arrow (U+2192), checkmark (U+2713), heavy check (U+2714), cross (U+2717/U+2718), bullets (U+2022, U+25CF, U+25E6), stars (U+2605, U+2606), pointing triangles (U+25B6, U+25BC) into source files, markdown, comments, commit messages, or PR bodies. They render inconsistently across terminals, encodings (cp1252 on Windows blows up — see also the project codebase), and search tools, and they add zero meaning over plain ASCII.
