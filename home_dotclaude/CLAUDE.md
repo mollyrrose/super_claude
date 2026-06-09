@@ -176,6 +176,18 @@ Every meaningful change requires a DOX pass before the task is done. Update the 
 
 Also update parent docs when parent-level structure or child index changes, and child docs when a parent change alters local rules. Remove stale or contradictory text immediately. Edits that don't change behavior or contracts may leave docs unchanged, but you still do the pass and report it.
 
+### Self-learning convergence override
+
+The "After editing" rule above applies to **user-driven edits in the current session**. Automated self-learning paths (the auto-curator, `/learn`, `/rev-learn`, qrev-auto, semgrep auto-rule discovery, and any future analogous loop) MUST NOT use the DOX pass to write durable rules into branch-tracked `AGENTS.md` files. They fragment across worktrees and contradict the convergence pattern the rest of this setup follows — every other self-learning artifact in this config (`~/.claude/.hermes_*.json`, `~/.claude/.qrev_*`, `~/.claude/skills/hermes-auto-*/`) already lives outside any working tree on purpose.
+
+Routing for auto-learned durable rules:
+
+1. **Skill-shaped learnings** -> `~/.claude/skills/hermes-auto-<slug>/` (existing curator path). Shared across all worktrees, never branch-tracked.
+2. **Counter / state learnings** -> `~/.claude/.hermes_*.json` or `~/.claude/.qrev_*` (existing pattern). Shared across all worktrees.
+3. **Rules that genuinely belong in an `AGENTS.md`** -> stage as a proposed diff and surface it to the user. Only the user-driven DOX pass writes it, and only into the **root** `AGENTS.md` on `main` (or rebased onto `main` immediately). Never silently into a feature-branch child `AGENTS.md`.
+
+Worktree-local self-learning state (per-session counters, transient queues) may live inside the current working tree under a gitignored path (`.claude/review-log/`, `.scratch/`, etc.) — it's not branch-tracked, so it doesn't fragment.
+
 ### Creating a child AGENTS.md
 
 Create one when a folder becomes a durable boundary with its own purpose, rules, responsibilities, workflow, materials, or quality standards. Default section order:
