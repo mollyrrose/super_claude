@@ -10,16 +10,19 @@ This file extends the global `~/.claude/CLAUDE.md` with rules specific to this r
 
 This rule mirrors the global rule and is restated here so it's visible inside the project too.
 
-Don't put characters like the rightward arrow (U+2192), checkmark (U+2713/U+2714), cross (U+2717/U+2718), bullets (U+2022/U+25CF/U+25E6), stars (U+2605/U+2606) or pointing triangles (U+25B6/U+25BC) into source files, markdown, comments, commit messages, or PR bodies.
+Don't put characters like the rightward arrow (U+2192), check marks (U+2713/U+2714/U+2705/U+2611/U+1F5F8/U+1F5F9), crosses or X marks (U+2715/U+2716/U+2717/U+2718/U+274C/U+274E/U+2612/U+1F5D9/U+1F5F4/U+1F5F5/U+1F5F7), info source (U+2139/U+1F6C8), bullets (U+2022/U+25CF/U+25E6), stars (U+2605/U+2606) or pointing triangles (U+25B6/U+25BC) into source files, markdown, comments, commit messages, PR bodies, **shell commands, regex patterns, or any other tool input**.
 
 The same rule covers **emoji-style** decorative glyphs and any visually similar character. Forbidden emoji (non-exhaustive — the principle covers anything in the same family):
-- check / OK: `✅` (U+2705), `✔️` (U+2714 U+FE0F), `☑` (U+2611)
-- fail / wrong: `❌` (U+274C), `❎` (U+274E)
+- check / OK / pipa (all colors, weights, and box variants): U+2713, U+2714, U+2714 U+FE0F, U+2705, U+2611, U+1F5F8, U+1F5F9
+- fail / wrong / X mark (all colors, weights, and box variants): U+2715, U+2716, U+2717, U+2718, U+274C, U+274E, U+2612, U+1F5D9, U+1F5F4, U+1F5F5, U+1F5F7
+- info source: U+2139, U+1F6C8
 - warning / alert: `⚠️` (U+26A0), `⛔` (U+26D4), `🚨` (U+1F6A8)
 - status dots: `🟢🔴🟡🔵` (U+1F7E2..U+1F7E6) and the larger circle family
 - thumbs / pointing hands: `👍👎` (U+1F44D/U+1F44E), `👉👈👆👇`
 - decoration: `✨` (U+2728), `⭐🌟`, `🔥` (U+1F525), `🚀` (U+1F680), `🎉🎊`, `💯`
 - notes / ideas: `💡` (U+1F4A1), `📝` (U+1F4DD), `📌` (U+1F4CC), `📚`, `📋`
+
+Even when filtering output that contains these glyphs (e.g. `grep` over a `node:test` reporter stream that emits check variants `✓ ✔ ✅ ☑ 🗸 🗹` (U+2713 / U+2714 / U+2705 / U+2611 / U+1F5F8 / U+1F5F9), X variants `✕ ✖ ✗ ✘ ❌ ❎ ☒ 🗙 🗴 🗵 🗷` (U+2715 / U+2716 / U+2717 / U+2718 / U+274C / U+274E / U+2612 / U+1F5D9 / U+1F5F4 / U+1F5F5 / U+1F5F7), or info-source variants `ℹ 🛈` (U+2139 / U+1F6C8)), write the filter using ASCII keywords like `fail|error|pass` — **never quote the glyph itself** in a pattern. The reporter also emits ASCII status words alongside the glyphs (`fail 0`, `pass 12`); match those.
 
 Rule of thumb: if a character is outside Basic Latin / Latin-1 and isn't on the functional allowlist below, treat it as decoration and drop it.
 

@@ -212,11 +212,12 @@ Leave Work Guidance and Verification empty when no concrete standards or checks 
 
 ## No decorative unicode in code or docs
 
-Don't write characters like `->` rendered as arrow (U+2192), checkmark (U+2713), heavy check (U+2714), cross (U+2717/U+2718), bullets (U+2022, U+25CF, U+25E6), stars (U+2605, U+2606), pointing triangles (U+25B6, U+25BC) into source files, markdown, comments, commit messages, or PR bodies. They render inconsistently across terminals, encodings (cp1252 on Windows blows up — see also the project codebase), and search tools, and they add zero meaning over plain ASCII.
+Don't write characters like `->` rendered as arrow (U+2192), check marks (U+2713, U+2714, U+2705, U+2611, U+1F5F8, U+1F5F9), crosses or X marks (U+2715, U+2716, U+2717, U+2718, U+274C, U+274E, U+2612, U+1F5D9, U+1F5F4, U+1F5F5, U+1F5F7), info source (U+2139, U+1F6C8), bullets (U+2022, U+25CF, U+25E6), stars (U+2605, U+2606), pointing triangles (U+25B6, U+25BC) into source files, markdown, comments, commit messages, PR bodies, **shell commands, regex patterns, or any other tool input**. They render inconsistently across terminals, encodings (cp1252 on Windows blows up — see also the project codebase), and search tools, and they add zero meaning over plain ASCII.
 
 The same rule applies to **emoji-style** decorative glyphs and any visually similar character. Forbidden emoji (non-exhaustive — the principle covers anything in the same family):
-- check / OK: white heavy check mark `✅` (U+2705), check mark with VS-16 `✔️` (U+2714 U+FE0F), ballot box w/ check `☑` (U+2611)
-- fail / wrong: cross mark `❌` (U+274C), negative squared cross `❎` (U+274E)
+- check / OK / pipa (all colors, weights, and box variants): check mark (U+2713), heavy check (U+2714), check w/ VS-16 (U+2714 U+FE0F), white heavy check on green (U+2705), ballot box w/ check (U+2611), light check (U+1F5F8), ballot box w/ bold check (U+1F5F9)
+- fail / wrong / X mark (all colors, weights, and box variants): multiplication x (U+2715), heavy multiplication x (U+2716), ballot x (U+2717), heavy ballot x (U+2718), red cross mark (U+274C), green negative squared cross (U+274E), ballot box w/ x (U+2612), cancellation x (U+1F5D9), ballot script x (U+1F5F4), ballot script x w/ box (U+1F5F5), ballot box w/ bold script x (U+1F5F7)
+- info source: information source (U+2139), circled information source (U+1F6C8)
 - warning / alert: warning sign `⚠️` (U+26A0), no entry `⛔` (U+26D4), police light `🚨` (U+1F6A8)
 - status dots: green/red/yellow/blue circles `🟢🔴🟡🔵` (U+1F7E2..U+1F7E6), large circles `⚫⚪🟠🟣🟤` family
 - thumbs / hands: thumbs up/down `👍👎` (U+1F44D/U+1F44E), pointing hands `👉👈👆👇`
@@ -233,6 +234,8 @@ Use ASCII equivalents:
 - info: `[i]` or `note:`
 
 This rule does NOT apply to **functional** unicode in user-facing display — e.g. the statusline progress-bar glyphs (`U+2588 U+2591`) and the pace arrows (`U+25B2 U+25BC`) are deliberate UI, not decoration, and stay. The em-dash (`—`, U+2014) is fine in prose because plain `--` is ambiguous with CLI flag syntax. The question is "does it convey something a plain-text reader needs?" — if yes, keep; if it's just visual flair, use ASCII.
+
+Even when filtering output that contains these glyphs (e.g. `grep` over a `node:test` reporter stream that emits check variants `✓ ✔ ✅ ☑ 🗸 🗹` (U+2713 / U+2714 / U+2705 / U+2611 / U+1F5F8 / U+1F5F9), X variants `✕ ✖ ✗ ✘ ❌ ❎ ☒ 🗙 🗴 🗵 🗷` (U+2715 / U+2716 / U+2717 / U+2718 / U+274C / U+274E / U+2612 / U+1F5D9 / U+1F5F4 / U+1F5F5 / U+1F5F7), or info-source variants `ℹ 🛈` (U+2139 / U+1F6C8)), write the filter using ASCII keywords like `fail|error|pass` — **never quote the glyph itself** in a pattern. The reporter also emits ASCII status words alongside the glyphs (`fail 0`, `pass 12`); match those.
 
 ## Not for this directory
 
