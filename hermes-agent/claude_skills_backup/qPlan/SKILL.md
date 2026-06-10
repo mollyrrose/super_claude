@@ -44,7 +44,7 @@ if absent:
 
 ```yaml
 critic_provider: panel         # panel | claude | openai
-                               # panel (NEW DEFAULT) = multi-lens critic fleet
+                               # panel (DEFAULT) = max-mode multi-lens critic fleet
                                # claude / openai = v1 single-critic backwards-compat
 panel_lenses:                  # max-mode default — all 22 lenses on
   # ----- 15 installed-skill lenses -----
@@ -76,7 +76,11 @@ panel_min_lenses: 7            # below this after mute heuristics → config err
 panel_bias_injections: true    # CoVe + negative-constraint + "could you be wrong"
                                # applied to every lens prompt by the orchestrator
 openai_backend: api            # api | browser (browser is a stub in v1)
-model: <provider default>      # claude: current session; openai: gpt-4o
+model: <provider default>      # claude: current session
+                               # openai: auto-pick best /v1/models entry
+                               # (gpt-5.5 > gpt-5.1 > gpt-5 > o3-pro > o3 > ...,
+                               # cached 24h in ~/.claude/.qplan_openai_model_cache.json;
+                               # set this field to lock a specific model)
 max_concept_rounds: 8          # Phase A cap
 K: 5                           # no_progress cap in Phase B
 hard_cap_rounds: 20            # unconditional global cap
@@ -88,6 +92,18 @@ critic_prefix:  "Erről mit gondolsz? Hol javítanád?:"
 `OPENAI_API_KEY`. The script fails loud if the key is missing — it does NOT
 silently fall back to `claude`, because the whole point of provider
 comparison is to keep them distinguishable.
+
+**Model auto-discovery.** When no `model:` is set in the config block, the
+OpenAI critic queries `GET /v1/models` once per 24 h and picks the highest-
+priority chat model the key can reach, walking the `MODEL_PRIORITY` table in
+`scripts/openai_critic.py` (`gpt-5.5` > `gpt-5.1` > `gpt-5` > `o3-pro` > `o3`
+> `gpt-5-mini` > `gpt-4.1` > `o1` > `o3-mini` > `gpt-4.1-mini` > `gpt-4o` >
+`gpt-4o-mini` > `o1-mini`). Within a family the un-dated stable alias wins,
+so as OpenAI re-points e.g. `gpt-5` at a new snapshot the critic follows
+without code changes. Pick is cached in
+`~/.claude/.qplan_openai_model_cache.json`; force a refresh with
+`QPLAN_OPENAI_MODEL_REFRESH=1` or by deleting the file. Set `model:` in the
+config block to lock a specific model and skip discovery entirely.
 
 `critic_provider: panel` is the default and runs in **max mode**: all 22
 lenses from `references/panel-prompts.md` are active by default. 15 of them
@@ -125,6 +141,14 @@ playbook).
 The outer author↔critic state machine — ledger, tier rubric, no_progress
 counter, termination conditions — is unchanged. Only what counts as a
 "critic turn" expanded.
+
+Max mode is deliberately costlier than a single-critic turn — the trade is
+breadth of coverage. The ledger's cross-lens semantic match collapses
+duplicate points into single entries with `source_lenses: [...]` and
+`repeat_count` rising faster, so cross-lens corroboration becomes a
+stronger "this is real" signal than any single critic could produce. For
+trivial work (config tweaks, one-file edits), use `critic_provider: claude`
+or just `/think` — the panel is overkill there.
 
 `critic_provider: claude` and `critic_provider: openai` keep the v1
 single-critic behavior verbatim. Use them when you want to reproduce a
@@ -249,6 +273,27 @@ Append a closing summary section to `transcript.md`:
 
 Present the same one-screen summary to the user in chat, plus the workdir
 path and the final `plan.md`.
+
+### 4. Emit curator signal
+
+After the closing summary is written (and BEFORE you hand the chat back to
+the user), call the curator-emit helper with the workdir path:
+
+```bash
+"C:\Python313\python.exe" "C:\Users\Seal Josephson\.claude\scripts\qplan_curate_emit.py" "<absolute workdir path>"
+```
+
+The helper distills the highest-signal parts of this run's `state.json` +
+`ledger.jsonl` (accepted Structural/Behavioral suggestions, rejected
+suggestions with `repeat_count >= 3`) and appends them to
+`~/.claude/.hermes_qplan_curator_queue.json`. The `hermes-curate` skill
+picks these up the next time it drains. The helper is fail-soft: if it
+prints `{"status": "skipped"...}` because there were no Structural/
+Behavioral acceptances and no repeated rejections in this run, that's a
+valid outcome — do not retry, do not panic. Just continue.
+
+Do NOT mention the emit call to the user; it is silent bookkeeping like
+the closing summary. The user only sees the one-screen chat summary.
 
 ## Role prompts and rubric
 
