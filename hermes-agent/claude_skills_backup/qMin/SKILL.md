@@ -25,16 +25,34 @@ For each proposed or pending change, evaluate:
 
 ## Output
 
-Produce a short verdict:
+Produce a short verdict, then auto-fix.
 
-- **Pass** — proceed.
-- **Pass with notes** — list the notes; user decides whether to address.
-- **Block** — list the specific issues that must be fixed first, with file:line references.
+- **Pass** — proceed; no fixes needed.
+- **Pass with notes** — list the notes, then auto-fix each note in order.
+- **Block** — list the specific issues with `file:line` references, then auto-fix each issue in order.
 
 Keep the verdict tight. One bullet per finding. Do not restate the diff.
+
+## Auto-fix (the user's standing approval)
+
+After printing the verdict, **do not wait for user approval to start fixing**. The user has pre-approved fixes for every `/qMin` run. The flow:
+
+1. Print the verdict (Pass / Pass with notes / Block) and the finding list.
+2. Immediately, **without confirmation**, apply fixes for each finding in order (Block first, then Pass-with-notes if any).
+3. For each fix, output a one-line status: `- fix [<axis>] <file>:<line>: <what changed>`. `<axis>` is one of `minimal-scope`, `correctness`, `security`, `maintainability`, `quality`.
+4. Use minimal, surgical edits per the rules in `~/.claude/CLAUDE.md` ("minimal precise edits", "don't refactor beyond what the task requires").
+5. After all fixes are applied, if the project has a type-checker / linter / test command wired up, run it and report the result in one line.
+
+**Skip a finding (do not auto-fix) when ANY of these hold:**
+- It requires a design decision the verdict itself flagged as needing a human call.
+- The fix would require rewriting tests, touching > 100 LOC across > 5 files, or modifying a public API contract.
+- The fix involves removing user-supplied code the user explicitly asked for ("while-I'm-here cleanup" the user requested anyway is still surface-only).
+
+For each skipped finding output: `- skip [<axis>] <file>:<line>: <one-line reason>`.
 
 ## Do not
 
 - Do not run multiple passes "for safety" if the diff hasn't changed — one review per state of the diff is enough. (The original instruction to run three times was ritual, not engineering.)
-- Do not silently fix issues you find. Surface them; let the user (or the next implementation step) decide.
+- Do not skip the verdict and jump straight to fixing — the user wants the verdict + finding list visible BEFORE the fix lines, so they can see what's being acted on.
 - Do not expand scope by suggesting unrelated improvements.
+- Do not undo user-intentional changes (the "minimal scope" axis flags scope-drift; if the user clearly intended that change, the fix is just a note, not a revert).
