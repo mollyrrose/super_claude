@@ -16,6 +16,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 STATE_FILE = Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude"))) / ".qrev_auto_state.json"
+VERDICT_LOG_FILE = Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude"))) / ".qrev_verdict_log.jsonl"
+
+
+def append_verdict_log(sid: str, kind: str, summary: dict, ts: str) -> None:
+    """Append one row to ~/.claude/.qrev_verdict_log.jsonl. Caller wraps in try/except."""
+    row = {"ts": ts, "session_id": sid, "kind": kind, "verdict_summary": summary}
+    VERDICT_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with VERDICT_LOG_FILE.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
 def now_iso() -> str:
@@ -86,6 +95,13 @@ def main() -> int:
     entry["last_event_at"] = nowi
     data[sid] = entry
     save_state(data)
+
+    verdict_summary = payload.get("verdict_summary")
+    if isinstance(verdict_summary, dict):
+        try:
+            append_verdict_log(sid, kind, verdict_summary, nowi)
+        except Exception:
+            pass  # logger must never block the counter reset
 
     sys.stdout.write(json.dumps({"reset": kind, "session_id": sid, "ts": nowi}))
     return 0
