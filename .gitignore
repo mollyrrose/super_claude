@@ -37,6 +37,8 @@ hermes-agent.bak.*/
 
 # ---------- top-level junk ----------
 /ruvector.db
+/.scratch/
+/tmp/
 
 # ---------- per-project Claude Code harness state ----------
 /.claude/
