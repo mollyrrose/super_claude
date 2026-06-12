@@ -55,7 +55,9 @@ param(
     [switch]$Redetect,
     [string]$SystemPython,
     [switch]$Force,
-    [switch]$SkipModels
+    [switch]$SkipModels,
+    [switch]$WithTalkingHead,
+    [switch]$SkipTalkingHead
 )
 
 $ErrorActionPreference = 'Stop'
@@ -462,6 +464,170 @@ if (-not (Test-Command 'claude')) {
 }
 
 # ---------------------------------------------------------------------------
+# Phase 10 — Talking-head pipeline (FLOAT + F5-TTS + VideoHelperSuite)
+# ---------------------------------------------------------------------------
+#
+# Optional. Adds an audio-driven talking-portrait pipeline on top of ComfyUI:
+#   - FFmpeg shared build (DLLs for torchcodec — replaces essentials)
+#   - ComfyUI-FLOAT (yuvraj108c) — audio-driven talking portrait
+#   - ComfyUI-F5-TTS (niknah) — text-to-speech (Hungarian model bundled)
+#   - ComfyUI-VideoHelperSuite (Kosinkadink) — video encoding
+#   - transformers downgrade <5 (FLOAT incompatible with 5.x)
+#
+# Total disk: ~13 GB. Generation: ~1-2 min/5s talking-head clip on Tier C.
+# License: FLOAT is CC BY-NC-SA 4.0 — non-commercial use only.
+
+$installTH = $false
+if ($WithTalkingHead) {
+    $installTH = $true
+} elseif ($SkipTalkingHead) {
+    $installTH = $false
+} else {
+    Write-Host ""
+    Write-Host "============================================================================" -ForegroundColor Cyan
+    Write-Host "Optional add-on: talking-head pipeline (FLOAT + F5-TTS)" -ForegroundColor Cyan
+    Write-Host "============================================================================" -ForegroundColor Cyan
+    Write-Host @"
+This adds an audio-driven talking-portrait pipeline to your ComfyUI:
+  - FFmpeg shared build (replaces essentials, ~95 MB)
+  - ComfyUI-FLOAT custom node + ~2 GB auto-downloaded models
+  - ComfyUI-F5-TTS custom node + 672 MB Hungarian voice model
+  - ComfyUI-VideoHelperSuite custom node
+  - transformers downgrade to 4.x (FLOAT requires <5)
+
+Total: ~13 GB extra disk.
+Generation: ~1-2 min per 5-second talking-head clip on Tier C.
+License: FLOAT is CC BY-NC-SA 4.0 — non-commercial use only.
+
+You'll still need to:
+  - Save a face portrait into ai_video/comfyui/input/
+  - Either supply an audio file or generate speech via F5-TTS
+  - Switch the VHS_VideoCombine 'format' dropdown to 'video/h264-mp4'
+    (your nvidia driver is too old for the new ffmpeg's nvenc)
+"@
+    $answer = Read-Host "Install talking-head pipeline? [y/N]"
+    $installTH = ($answer -match '^(y|Y|yes|YES)$')
+}
+
+if ($installTH) {
+    Write-Step 'Talking-head pipeline'
+
+    # Step 10a — replace ffmpeg-essentials with ffmpeg-shared (DLLs)
+    $ffmpegDir = Join-Path $AiVideoRoot 'ffmpeg'
+    $sharedMarker = Join-Path $ffmpegDir 'avcodec-62.dll'
+    if (Test-Path $sharedMarker) {
+        Write-Skip 'ffmpeg shared build already in place'
+    } else {
+        Write-Host '  downloading BtbN ffmpeg-shared zip (~95 MB) ...'
+        $sharedZip = Join-Path $ProjectRoot '.scratch\ffmpeg_shared.zip'
+        if (-not (Test-Path (Split-Path $sharedZip))) {
+            New-Item -ItemType Directory -Force -Path (Split-Path $sharedZip) | Out-Null
+        }
+        Invoke-WebRequest -UseBasicParsing -Uri `
+            'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip' `
+            -OutFile $sharedZip
+        if (-not (Test-Path $ffmpegDir)) { New-Item -ItemType Directory -Force -Path $ffmpegDir | Out-Null }
+        # Wipe any older essentials build (no DLLs)
+        Get-ChildItem $ffmpegDir -File | Remove-Item -Force
+        # Extract bin/ contents (exes + DLLs) to flat ai_video/ffmpeg/
+        & $VenvPython -c @"
+import zipfile, os, shutil
+src = r'$sharedZip'
+dst = r'$ffmpegDir'
+with zipfile.ZipFile(src) as z:
+    members = [m for m in z.namelist() if '/bin/' in m and m.endswith(('.exe', '.dll'))]
+    for m in members:
+        target = os.path.join(dst, os.path.basename(m))
+        with z.open(m) as sf, open(target, 'wb') as df:
+            shutil.copyfileobj(sf, df)
+print('extracted', len(members), 'files')
+"@ 2>&1 | Out-Null
+        Write-OK 'ffmpeg-shared installed (avcodec/avformat/etc DLLs in ai_video/ffmpeg/)'
+    }
+
+    # Step 10b — clone custom nodes
+    $customNodesDir = Join-Path $ComfyUIRoot 'custom_nodes'
+    $thRepos = @(
+        @{ Name = 'ComfyUI-FLOAT';            Url = 'https://github.com/yuvraj108c/ComfyUI-FLOAT.git' },
+        @{ Name = 'ComfyUI-F5-TTS';           Url = 'https://github.com/niknah/ComfyUI-F5-TTS.git' },
+        @{ Name = 'ComfyUI-VideoHelperSuite'; Url = 'https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git' }
+    )
+    foreach ($repo in $thRepos) {
+        $target = Join-Path $customNodesDir $repo.Name
+        if (Test-Path (Join-Path $target '.git')) {
+            Write-Skip "$($repo.Name) already cloned"
+        } else {
+            Write-Host "  git clone $($repo.Name) ..."
+            & git -C $customNodesDir clone --depth 1 --quiet $repo.Url
+            if ($LASTEXITCODE -eq 0) { Write-OK "$($repo.Name) cloned" }
+            else { Write-Warn "$($repo.Name) clone failed" }
+        }
+    }
+
+    # Step 10c — pip install all three nodes' requirements into venv
+    foreach ($repo in $thRepos) {
+        $req = Join-Path $customNodesDir "$($repo.Name)\requirements.txt"
+        if (Test-Path $req) {
+            Write-Host "  pip install $($repo.Name) deps ..."
+            & $VenvPython -m pip install --quiet -r $req 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) { Write-OK "$($repo.Name) deps installed" }
+            else { Write-Warn "$($repo.Name) pip install non-zero exit (check manually)" }
+        }
+    }
+
+    # Step 10d — downgrade transformers (FLOAT incompatible with 5.x)
+    $tver = & $VenvPython -c "import transformers; print(transformers.__version__)" 2>$null
+    if ($tver -match '^[0-4]\.') {
+        Write-Skip "transformers $($tver.Trim()) already <5"
+    } else {
+        Write-Host "  downgrading transformers to 4.x (FLOAT requires <5) ..."
+        & $VenvPython -m pip install --quiet 'transformers<5' 2>&1 | Out-Null
+        Write-OK 'transformers downgraded'
+    }
+
+    # Step 10e — Hungarian F5-TTS model
+    $f5Dir = Join-Path $ModelsDir 'checkpoints\F5-TTS'
+    $huModel = Join-Path $f5Dir 'Hungarian.safetensors'
+    $huVocab = Join-Path $f5Dir 'Hungarian.txt'
+    if (Test-Path $huModel) {
+        Write-Skip 'Hungarian F5-TTS already present'
+    } else {
+        if (-not (Test-Path $f5Dir)) { New-Item -ItemType Directory -Force -Path $f5Dir | Out-Null }
+        Write-Host '  downloading Maxdorger29/f5-tts-hungarian (~672 MB) ...'
+        Invoke-WebRequest -UseBasicParsing -Uri `
+            'https://huggingface.co/Maxdorger29/f5-tts-hungarian/resolve/main/model_last_final.safetensors' `
+            -OutFile $huModel
+        Invoke-WebRequest -UseBasicParsing -Uri `
+            'https://huggingface.co/Maxdorger29/f5-tts-hungarian/resolve/main/vocab.txt' `
+            -OutFile $huVocab
+        Write-OK 'Hungarian F5-TTS downloaded'
+    }
+
+    # Step 10f — copy FLOAT example workflow into user/default/workflows/
+    $floatExample = Join-Path $customNodesDir 'ComfyUI-FLOAT\float_workflow.json'
+    $uwfDir = Join-Path $ComfyUIRoot 'user\default\workflows'
+    if (Test-Path $floatExample) {
+        if (-not (Test-Path $uwfDir)) { New-Item -ItemType Directory -Force -Path $uwfDir | Out-Null }
+        Copy-Item $floatExample (Join-Path $uwfDir 'float_talking_head.json') -Force
+        Write-OK 'FLOAT workflow copied to user/default/workflows/'
+    }
+
+    # Step 10g — patch launcher.bat to prepend ai_video/ffmpeg/ to PATH
+    $launchTxt = Get-Content $LaunchBat -Raw
+    if ($launchTxt -notmatch 'ai_video\\ffmpeg') {
+        $patched = $launchTxt -replace `
+            '(cd /d D:\\projects\\super_claude\\ai_video\\comfyui\r?\n)', `
+            "`$1`r`nREM Talking-head pipeline: torchcodec needs ffmpeg shared DLLs on PATH.`r`nset `"PATH=$ffmpegDir;%PATH%`"`r`n"
+        Set-Content -Path $LaunchBat -Value $patched -Encoding ASCII
+        Write-OK 'launcher patched to prepend ffmpeg/ to PATH'
+    } else {
+        Write-Skip 'launcher already includes ffmpeg PATH prefix'
+    }
+
+    Write-OK 'Talking-head pipeline installed'
+}
+
+# ---------------------------------------------------------------------------
 # Final report
 # ---------------------------------------------------------------------------
 
@@ -490,6 +656,14 @@ NEXT STEPS (you do these manually, ~3 minutes):
 
 4. Restart Claude Code so it loads the new MCP servers. Then ask:
      "Use comfyui-local generate_video with prompt 'a slow push-in on a misty pine forest at dawn'"
+
+5. (Talking-head only) Open ComfyUI -> File -> Open ->
+     $ComfyUIRoot\user\default\workflows\float_talking_head.json
+   - Drop a face portrait into ai_video\comfyui\input\
+   - In the LoadImage node dropdown, pick that portrait
+   - In the LoadAudio node dropdown, pick an audio sample
+   - In VHS_VideoCombine, change 'format' to 'video/h264-mp4' (NOT nvenc)
+   - Run. First call auto-downloads FLOAT models (~2 GB), then ~1-2 min/clip.
 
 See docs\AI_VIDEO_SETUP.md for troubleshooting and per-tier guidance.
 "@

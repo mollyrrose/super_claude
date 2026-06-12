@@ -104,6 +104,57 @@ Steps you do manually after the script (a few minutes):
 
 ---
 
+## Talking-head pipeline (FLOAT + F5-TTS) — optional add-on
+
+Lip-synced talking portrait videos from a face image + audio.
+
+The installer asks at the end: `Install talking-head pipeline? [y/N]`. You can also force the answer via flags:
+
+```powershell
+.\scripts\setup_ai_video.ps1 -WithTalkingHead   # auto-yes
+.\scripts\setup_ai_video.ps1 -SkipTalkingHead   # auto-no
+```
+
+### What it sets up
+
+| Component | Source | Size | Role |
+|---|---|---|---|
+| FFmpeg shared build | BtbN/FFmpeg-Builds | ~95 MB | Replaces ffmpeg-essentials; ships avcodec/avformat DLLs that `torchcodec` needs |
+| ComfyUI-FLOAT | yuvraj108c/ComfyUI-FLOAT | ~5 MB code + ~2 GB models (auto-download on first Run) | Audio-driven talking portrait, CC BY-NC-SA 4.0 |
+| ComfyUI-F5-TTS | niknah/ComfyUI-F5-TTS | ~5 MB code | TTS node + sample WAVs |
+| Hungarian F5-TTS | Maxdorger29/f5-tts-hungarian | 672 MB | Magyar voice clone |
+| ComfyUI-VideoHelperSuite | Kosinkadink | ~5 MB code | Video encoding (`VHS_VideoCombine`) |
+| transformers `<5` downgrade | PyPI | swap | FLOAT incompatible with transformers 5.x |
+
+Total disk: ~13 GB. Tier C generation: ~1-2 min per 5-second clip (after first Run cache warm-up).
+
+License: FLOAT is CC BY-NC-SA 4.0 — **non-commercial use only**.
+
+### Post-install manual steps (UI)
+
+1. Run `ai_video\start_comfyui.bat` (the launcher is patched to prepend `ai_video\ffmpeg\` to PATH so torchcodec finds the shared DLLs).
+2. In the browser at `http://127.0.0.1:8188`:
+   - **File -> Open** -> `ai_video/comfyui/user/default/workflows/float_talking_head.json`
+   - **Load Image** node: pick a portrait. Drop your own into `ai_video/comfyui/input/` first; it appears in the dropdown after a refresh.
+   - **Load Audio** node: pick an audio file from the same dropdown.
+   - **VHS_VideoCombine** node: change `format` from `video/nvenc_h264-mp4` to `video/h264-mp4` (the new FFmpeg requires NVIDIA driver 610+ for nvenc; on older drivers the software h264 encoder works).
+3. Click **Run**. First call auto-downloads FLOAT models (~2 GB) — wait 2-3 minutes. Output MP4 lands in `ai_video/comfyui/output/AnimateDiff_*-audio.mp4`.
+
+### What worked / what failed during first install (RTX 4070 Laptop, driver 560.76)
+
+Captured here verbatim so the script can avoid the dead ends:
+
+| Issue | Resolution |
+|---|---|
+| `'Wav2Vec2ForSpeechClassification' object has no attribute 'all_tied_weights_keys'` at LoadFloatModels | F5-TTS pulled in transformers 5.x; FLOAT requires `<5`. Downgrade to 4.57.x via `pip install "transformers<5"`. |
+| `Could not load libtorchcodec` / `Could not find module libtorchcodec_core8.dll` at FloatProcess | Initial install used `ffmpeg-release-essentials` (static, no DLLs). torchcodec needs ffmpeg shared libs. Replace with BtbN `ffmpeg-master-latest-win64-gpl-shared.zip`; the `avcodec-62.dll` etc. drop into `ai_video/ffmpeg/`. |
+| `h264_nvenc: Driver does not support the required nvenc API version. Required: 13.1 Found: 12.2` at VHS_VideoCombine | New ffmpeg's nvenc requires NVIDIA driver 610+. On 560.76, fall back to `video/h264-mp4` (CPU x264). Generation still completes, just the encode step takes a few extra seconds. |
+| Drag-and-drop of workflow JSON onto canvas was silently ignored | Use **File -> Open** instead. Or copy the JSON into `comfyui/user/default/workflows/` so it appears in the workflow browser. |
+| Missing Inputs panel showed "Uploaded" checkmarks but Load nodes still complained about original baked-in filenames | The Missing Inputs upload UI does NOT update the node widget value. Either rename uploads to match the workflow's hardcoded names, or change the dropdown directly in the node's Parameters panel. |
+| `winget` not on PATH so couldn't install ffmpeg the suggested way | Skip winget. The script now downloads BtbN's zip directly and extracts into the project tree — no system PATH changes, no admin rights. |
+
+---
+
 ## Verification
 
 After the script finishes:
