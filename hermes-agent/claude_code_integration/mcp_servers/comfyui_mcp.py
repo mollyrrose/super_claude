@@ -75,7 +75,12 @@ POLL_TIMEOUT = int(os.environ.get("COMFYUI_POLL_TIMEOUT", "900"))
 POLL_INTERVAL = 2.0  # seconds between /history checks
 
 WORKFLOW_TEMPLATE_NAME = "ltxv_t2v.json"
+FLOAT_WORKFLOW_NAME = "float_t2v.json"
 CLIENT_ID = str(uuid.uuid4())  # stable for this server lifetime
+
+# Emotion options supported by the FLOAT pipeline. "none" = no override
+# (the model picks based on audio prosody). The rest are forced.
+FLOAT_EMOTIONS = ("none", "happy", "sad", "angry", "surprise", "fear", "disgust", "contempt", "neutral")
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +208,77 @@ def _patch_workflow(
 
 
 # ---------------------------------------------------------------------------
+# FLOAT (talking-head) workflow loading + patching
+# ---------------------------------------------------------------------------
+
+def _load_float_workflow() -> dict:
+    """Load the user's saved FLOAT T2V workflow (API format).
+
+    Raises FileNotFoundError with a clear how-to-fix message if absent —
+    the user has to Export (API) from the UI once.
+    """
+    path = WORKFLOW_DIR / FLOAT_WORKFLOW_NAME
+    if not path.exists():
+        raise FileNotFoundError(
+            f"No talking-head workflow at {path}. In ComfyUI UI, open "
+            f"float_talking_head.json then use Workflow -> Export (API) to "
+            f"write to that exact path. Then retry."
+        )
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _patch_float_workflow(
+    workflow: dict,
+    image_filename: str,
+    audio_filename: str,
+    emotion: str,
+    fps: float,
+) -> dict:
+    """Patch a copy of the FLOAT workflow with the requested inputs.
+
+    Strategy: scan nodes by class_type; LoadImage gets the image name,
+    LoadAudio gets the audio name, FloatProcess gets emotion (if !='none'),
+    and the FPS PrimitiveFloat node (if present) gets fps.
+
+    Both inputs/filenames must already exist in ComfyUI's input/ folder —
+    drop them there before calling. The MCP does not upload files.
+    """
+    out = copy.deepcopy(workflow)
+    if not isinstance(out, dict):
+        raise ValueError("workflow root must be a JSON object (API format)")
+
+    set_image = False
+    set_audio = False
+    for _nid, node in out.items():
+        if not isinstance(node, dict):
+            continue
+        ctype = node.get("class_type", "")
+        inputs = node.get("inputs")
+        if not isinstance(inputs, dict):
+            continue
+
+        if ctype == "LoadImage" and "image" in inputs:
+            inputs["image"] = image_filename
+            set_image = True
+        elif ctype == "LoadAudio" and "audio" in inputs:
+            inputs["audio"] = audio_filename
+            set_audio = True
+        elif ctype == "FloatProcess" and emotion and emotion != "none" and "emotion" in inputs:
+            inputs["emotion"] = emotion
+        elif ctype == "PrimitiveFloat" and "value" in inputs:
+            # Heuristic: the FPS node is the only PrimitiveFloat in the
+            # shipped FLOAT workflow. If a future workflow adds others,
+            # this picks the first one — that's fine in practice.
+            inputs["value"] = float(fps)
+
+    if not set_image:
+        raise ValueError("FLOAT workflow has no LoadImage node — wrong template?")
+    if not set_audio:
+        raise ValueError("FLOAT workflow has no LoadAudio node — wrong template?")
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Submit + poll
 # ---------------------------------------------------------------------------
 
@@ -310,6 +386,42 @@ async def list_tools() -> list[Tool]:
                 "required": ["prompt_id"],
             },
         ),
+        Tool(
+            name="generate_talking_head",
+            description=(
+                "Generate a talking-portrait video on the local ComfyUI using "
+                "the FLOAT pipeline (audio-driven lip-sync). The reference "
+                "image and audio file must already exist inside "
+                "ai_video/comfyui/input/ — this tool does not upload. "
+                "Typical Tier C wall-clock: 1-2 minutes per 5-second clip. "
+                "License reminder: FLOAT is CC BY-NC-SA 4.0 — non-commercial only."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "image_filename": {
+                        "type": "string",
+                        "description": "Filename of the reference portrait inside ai_video/comfyui/input/ (e.g. 'sam_altman_512x512.jpg').",
+                    },
+                    "audio_filename": {
+                        "type": "string",
+                        "description": "Filename of the audio inside ai_video/comfyui/input/ (e.g. 'aud-sample-vs-1.wav').",
+                    },
+                    "emotion": {
+                        "type": "string",
+                        "enum": list(FLOAT_EMOTIONS),
+                        "default": "none",
+                        "description": "Force a specific emotion override, or 'none' to let the model infer from audio prosody.",
+                    },
+                    "fps": {
+                        "type": "number",
+                        "default": 25,
+                        "description": "Output frame rate.",
+                    },
+                },
+                "required": ["image_filename", "audio_filename"],
+            },
+        ),
     ]
 
 
@@ -360,6 +472,34 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 return _err("prompt_id is required")
             resp = _http_post("/queue", {"delete": [pid]})
             return _ok({"deleted": pid, "response": resp})
+
+        if name == "generate_talking_head":
+            image_name = arguments.get("image_filename", "").strip()
+            audio_name = arguments.get("audio_filename", "").strip()
+            emotion = arguments.get("emotion", "none")
+            fps = float(arguments.get("fps", 25))
+
+            if not image_name:
+                return _err("image_filename is required (file must exist in ai_video/comfyui/input/)")
+            if not audio_name:
+                return _err("audio_filename is required (file must exist in ai_video/comfyui/input/)")
+            if emotion not in FLOAT_EMOTIONS:
+                return _err(f"emotion must be one of {list(FLOAT_EMOTIONS)}")
+
+            template = _load_float_workflow()
+            patched = _patch_float_workflow(template, image_name, audio_name, emotion, fps)
+            t0 = time.monotonic()
+            prompt_id = _submit_workflow(patched)
+            entry = _wait_for_completion(prompt_id)
+            paths = _extract_output_paths(entry)
+            dt = time.monotonic() - t0
+            return _ok({
+                "prompt_id": prompt_id,
+                "duration_s": round(dt, 1),
+                "outputs": paths,
+                "workflow_template": str(WORKFLOW_DIR / FLOAT_WORKFLOW_NAME),
+                "license_note": "FLOAT model is CC BY-NC-SA 4.0 (non-commercial)",
+            })
 
         return _err(f"unknown tool: {name}")
 
