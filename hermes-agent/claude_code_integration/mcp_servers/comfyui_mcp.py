@@ -183,8 +183,14 @@ def _patch_workflow(
 
         # Sampler / scheduler steps. The LTX templates put `steps` on the
         # scheduler (LTXVScheduler) and the sampler is the K-sampler-free
-        # SamplerCustom, so we patch wherever `steps` actually lives.
-        if ctype in ("KSampler", "KSamplerAdvanced", "LTXVScheduler") and "steps" in inputs:
+        # SamplerCustom. Hunyuan's template uses BasicScheduler the same way.
+        # Patch wherever `steps` actually lives.
+        if ctype in (
+            "KSampler",
+            "KSamplerAdvanced",
+            "LTXVScheduler",
+            "BasicScheduler",
+        ) and "steps" in inputs:
             inputs["steps"] = steps
 
     if not set_prompt:
