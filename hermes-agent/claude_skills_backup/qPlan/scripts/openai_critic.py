@@ -300,7 +300,7 @@ def call_openai(
             body = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         body_text = e.read().decode("utf-8", "replace")
-        # 2026-06-12: TPM caps differ per model (gpt-5.5-pro 50K, gpt-4o
+        # 2026-06-12: TPM caps differ per model (gpt-5.5 chat ~50K, gpt-4o
         # 30K). On 429, split the plan and retry per chunk. Same task and
         # ledger ride along with each chunk so the critic still has full
         # context. See feedback_model_selection_highest.md.
