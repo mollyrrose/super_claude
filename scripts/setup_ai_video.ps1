@@ -425,34 +425,70 @@ else {
 }
 
 # ---------------------------------------------------------------------------
+# Phase 9 — Register MCP servers with Claude Code
+# ---------------------------------------------------------------------------
+
+Write-Step 'Register MCP servers with Claude Code'
+
+if (-not (Test-Command 'claude')) {
+    Write-Warn 'claude CLI not on PATH - skipping MCP registration.'
+    Write-Host '    After installing Claude Code, run these two commands:'
+    Write-Host "      claude mcp add comfyui-local -- `"$sysPython`" `"$McpDir\comfyui_mcp.py`""
+    Write-Host "      claude mcp add sora-cloud    -- `"$sysPython`" `"$McpDir\sora_mcp.py`""
+} else {
+    # `claude mcp list` returns the registered MCPs; grep by name to skip
+    # re-registering. The CLI errors out cleanly if you add the same name
+    # twice, but no-op-on-skip is the cleaner UX for re-runs.
+    $mcpList = (& claude mcp list 2>&1 | Out-String)
+
+    $comfyMcp = Join-Path $McpDir 'comfyui_mcp.py'
+    $soraMcp  = Join-Path $McpDir 'sora_mcp.py'
+
+    if ($mcpList -match '(?m)^comfyui-local[:\s]') {
+        Write-Skip 'comfyui-local already registered'
+    } else {
+        & claude mcp add comfyui-local '--' $sysPython $comfyMcp 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) { Write-OK 'comfyui-local registered' }
+        else { Write-Warn 'comfyui-local registration failed (re-run after Claude Code is fully set up)' }
+    }
+
+    if ($mcpList -match '(?m)^sora-cloud[:\s]') {
+        Write-Skip 'sora-cloud already registered'
+    } else {
+        & claude mcp add sora-cloud '--' $sysPython $soraMcp 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) { Write-OK 'sora-cloud registered' }
+        else { Write-Warn 'sora-cloud registration failed (re-run after Claude Code is fully set up)' }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Final report
 # ---------------------------------------------------------------------------
 
 Write-Host "`n=== Setup complete ===" -ForegroundColor Green
 Write-Host @"
 
-NEXT STEPS (you do these manually, ~5 minutes):
+NEXT STEPS (you do these manually, ~3 minutes):
 
 1. Start ComfyUI:
      $LaunchBat
    It will be reachable at http://127.0.0.1:8188 in 30-60 seconds.
 
-2. Register the two MCP servers with Claude Code:
-     claude mcp add comfyui-local -- "$sysPython" "$McpDir\comfyui_mcp.py"
-     claude mcp add sora-cloud    -- "$sysPython" "$McpDir\sora_mcp.py"
-
-3. (Cloud only) Set the OpenAI API key, either:
+2. (Cloud only) Set the OpenAI API key, either:
      `$env:OPENAI_API_KEY = "sk-..."
    or:
      "sk-..." | Out-File -NoNewline "`$HOME\.claude\.openai_api_key"
 
-4. (Local only) Save a workflow JSON from the ComfyUI UI:
+3. (Local only) Save a workflow JSON from the ComfyUI UI:
    - Open http://127.0.0.1:8188 in a browser
    - Browse Templates -> Video -> LTX-Video
+     IMPORTANT: pick a workflow that uses LTX 0.9.8 (the model we
+     downloaded). LTX-2.3 templates reference 22B model files we
+     don't have - they will throw "missing model" errors.
    - Save (API Format) to:
        $WorkflowsDir\ltxv_t2v.json
 
-5. Restart Claude Code so it loads the new MCP servers. Then ask:
+4. Restart Claude Code so it loads the new MCP servers. Then ask:
      "Use comfyui-local generate_video with prompt 'a slow push-in on a misty pine forest at dawn'"
 
 See docs\AI_VIDEO_SETUP.md for troubleshooting and per-tier guidance.

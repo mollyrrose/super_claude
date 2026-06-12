@@ -49,16 +49,9 @@ The setup script auto-detects VRAM and picks the highest tier the machine can ru
 7. **Generate launcher** — `ai_video/start_comfyui.bat` with the right Tier C flags
 8. **Install MCP server deps** — `pip install --user mcp openai` (system Python, so Claude Code can spawn the MCP servers without activating any venv)
 
+9. **Register MCP servers with Claude Code** — the script does this for you if the `claude` CLI is on PATH. If it's missing, the script prints the two commands you need to run manually. Re-running the script after registering is safe (already-registered MCPs are skipped).
+
 Steps you do manually after the script (a few minutes):
-
-9. **Register the MCP servers** with Claude Code:
-
-   ```powershell
-   claude mcp add comfyui-local -- "C:/Python313/python.exe" "D:/projects/super_claude/hermes-agent/claude_code_integration/mcp_servers/comfyui_mcp.py"
-   claude mcp add sora-cloud    -- "C:/Python313/python.exe" "D:/projects/super_claude/hermes-agent/claude_code_integration/mcp_servers/sora_mcp.py"
-   ```
-
-   (Adjust the Python path if yours isn't at `C:/Python313/`.)
 
 10. **Set the Sora API key** (only if you want cloud video):
 
@@ -75,10 +68,11 @@ Steps you do manually after the script (a few minutes):
 11. **Save a workflow JSON for local video** (one-time):
 
     - Run `ai_video\start_comfyui.bat` (opens at `http://127.0.0.1:8188`)
-    - In the UI: **Browse Templates -> Video -> LTX-Video** (or any LTX T2V workflow)
+    - In the UI: **Browse Templates -> Video -> LTX-Video**
+    - **Important**: pick a template that uses **LTX 0.9.8** (the model the script downloads). LTX-2.3 templates expect ~12 GB additional model files (22B diffusion, spatial upscaler, distillation LoRA) that the Tier C download does NOT include — they will show "missing model" errors in the UI.
     - Use **Save (API Format)** to write to `ai_video\workflows\ltxv_t2v.json`
 
-    The `comfyui_mcp.py` server reads this JSON and patches prompt + dimensions + length into it on every `generate_video` call.
+    The `comfyui_mcp.py` server reads this JSON and patches prompt + dimensions + length into it on every `generate_video` call. The filename must be exactly `ltxv_t2v.json` (set via `COMFYUI_WORKFLOW_DIR` + `WORKFLOW_TEMPLATE_NAME` if you want to override).
 
 12. **Restart Claude Code** so it loads the new MCP servers, then test:
 

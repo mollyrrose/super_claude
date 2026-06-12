@@ -45,9 +45,11 @@ hermes-agent.bak.*/
 # Only setup_ai_video.ps1, workflows/, MCP servers, and docs are tracked.
 /ai_video/comfyui/
 /ai_video/models/
+/ai_video/add-ons/
 /ai_video/start_comfyui.bat
 /ai_video/upstream_state.json
 /ai_video/.scratch/
+*.crdownload
 *.openai_api_key
 
 # ---------- per-project Claude Code harness state ----------
