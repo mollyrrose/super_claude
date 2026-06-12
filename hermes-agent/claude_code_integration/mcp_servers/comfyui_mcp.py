@@ -166,7 +166,12 @@ def _patch_workflow(
             set_prompt = True
 
         # Dimensions + length
-        if ctype in ("EmptyLatentVideo", "EmptyHunyuanLatentVideo", "LTXVideoLatent"):
+        if ctype in (
+            "EmptyLatentVideo",
+            "EmptyHunyuanLatentVideo",
+            "LTXVideoLatent",
+            "EmptyLTXVLatentVideo",
+        ):
             if "width" in inputs:
                 inputs["width"] = width
             if "height" in inputs:
@@ -176,8 +181,10 @@ def _patch_workflow(
             if "num_frames" in inputs:
                 inputs["num_frames"] = length_frames
 
-        # Sampler steps
-        if ctype in ("KSampler", "KSamplerAdvanced") and "steps" in inputs:
+        # Sampler / scheduler steps. The LTX templates put `steps` on the
+        # scheduler (LTXVScheduler) and the sampler is the K-sampler-free
+        # SamplerCustom, so we patch wherever `steps` actually lives.
+        if ctype in ("KSampler", "KSamplerAdvanced", "LTXVScheduler") and "steps" in inputs:
             inputs["steps"] = steps
 
     if not set_prompt:
