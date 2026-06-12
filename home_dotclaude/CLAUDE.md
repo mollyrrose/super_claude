@@ -19,6 +19,37 @@ thinking: enabled
 - State the file you're editing and the reason in one short sentence.
 - Keep the diff scoped to the change at hand.
 
+## User input visibility — ALWAYS announce when waiting
+
+When a reply ends with a question, a choice, or any other prompt that
+expects me to type something back, the LAST line of the message MUST be
+the ASCII attention banner below — exactly this glyph and exactly this
+spelling — so I notice the terminal is idle waiting for me instead of
+just scrolling past:
+
+```
+*********************************
+*    USER INPUT REQUIRED        *
+*********************************
+```
+
+Applies to:
+- Direct questions ("Mit szeretnél?", "Yes/No?", "Which option?")
+- AskUserQuestion tool calls (the banner goes in the assistant text
+  output that accompanies the tool call, not into the tool's question
+  field itself).
+- Approvals, gate facts, "OK?" closings.
+- "Tell me when you're done" handoffs where you genuinely need me to act.
+
+Does NOT apply to:
+- Background-task progress notes where you'll keep working on receipt.
+- Pure status updates ("done.", "pushed.", "no changes left.").
+- End-of-turn summaries that don't await anything from me.
+
+When in doubt: if the terminal would sit idle until I type something,
+the banner is required. False positives are cheap; missing one means a
+window sits unused for minutes.
+
 ## Pushback expected
 
 - Ask clarifying questions when a request is ambiguous or under-specified.

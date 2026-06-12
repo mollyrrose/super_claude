@@ -189,7 +189,84 @@ def discover_model(api_key: str) -> str:
 # --- Chat call ------------------------------------------------------------
 
 
-def call_openai(api_key: str, model: str, task: str, plan: str, ledger: list) -> dict:
+# --- Chunking on HTTP 429 (TPM cap) ---------------------------------------
+#
+# Per memory rule feedback_model_selection_highest.md: when OpenAI returns
+# 429 on a critic call, split the plan on natural boundaries and submit
+# each piece separately, then merge verdicts. Recursion is capped so a
+# single huge plan can fan out to at most 16 sub-requests.
+
+MAX_CHUNK_DEPTH = 4
+VERDICT_SEVERITY = {"major issue": 0, "minor issue": 1, "no material issue": 2}
+
+
+def _split_plan(plan: str) -> list[str]:
+    """Split a plan in half on the most natural boundary available.
+
+    Preference order:
+      1. top-level Markdown headers (lines starting with `## `).
+      2. sub-section headers (`### `).
+      3. blank-line paragraph boundaries.
+      4. mid-line halve (last resort).
+
+    Returns either [plan] (cannot split further) or [left, right].
+    """
+    lines = plan.splitlines(keepends=True)
+
+    for prefix in ("## ", "### "):
+        starts = [i for i, ln in enumerate(lines) if ln.startswith(prefix)]
+        if len(starts) >= 2:
+            mid_idx = starts[len(starts) // 2]
+            return ["".join(lines[:mid_idx]), "".join(lines[mid_idx:])]
+
+    # Paragraph break — split on the longest run of blank lines near the middle.
+    if len(lines) >= 4:
+        mid = len(lines) // 2
+        # search outward from `mid` for a blank line
+        for offset in range(0, mid):
+            for sign in (-1, 1):
+                idx = mid + sign * offset
+                if 0 < idx < len(lines) and lines[idx].strip() == "":
+                    return ["".join(lines[:idx]), "".join(lines[idx:])]
+
+    # Last resort: split by line count.
+    if len(lines) <= 1:
+        return [plan]
+    mid = len(lines) // 2
+    return ["".join(lines[:mid]), "".join(lines[mid:])]
+
+
+def _merge_verdicts(sub_verdicts: list[dict]) -> dict:
+    """Merge findings from N chunk-verdicts.
+
+    - Concatenate suggestions; dedupe by exact-text match.
+    - Worst verdict tier wins (`major issue` > `minor issue` > `no material issue`).
+    """
+    seen_texts: set = set()
+    suggestions: list = []
+    worst = 2  # default = no material issue
+    for v in sub_verdicts:
+        sub = VERDICT_SEVERITY.get(v.get("verdict", "no material issue"), 2)
+        if sub < worst:
+            worst = sub
+        for s in v.get("suggestions", []) or []:
+            text = s.get("text", "").strip()
+            if not text or text in seen_texts:
+                continue
+            seen_texts.add(text)
+            suggestions.append(s)
+    verdict_str = next(k for k, v in VERDICT_SEVERITY.items() if v == worst)
+    return {"verdict": verdict_str, "suggestions": suggestions}
+
+
+def call_openai(
+    api_key: str,
+    model: str,
+    task: str,
+    plan: str,
+    ledger: list,
+    depth: int = 0,
+) -> dict:
     payload = {
         "model": model,
         "messages": [
@@ -222,10 +299,33 @@ def call_openai(api_key: str, model: str, task: str, plan: str, ledger: list) ->
         with urllib.request.urlopen(req, timeout=120) as resp:
             body = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        sys.stderr.write(
-            f"openai_critic: HTTP {e.code} — "
-            f"{e.read().decode('utf-8', 'replace')}\n"
-        )
+        body_text = e.read().decode("utf-8", "replace")
+        # 2026-06-12: TPM caps differ per model (gpt-5.5-pro 50K, gpt-4o
+        # 30K). On 429, split the plan and retry per chunk. Same task and
+        # ledger ride along with each chunk so the critic still has full
+        # context. See feedback_model_selection_highest.md.
+        if e.code == 429 and depth < MAX_CHUNK_DEPTH:
+            parts = _split_plan(plan)
+            if len(parts) < 2:
+                sys.stderr.write(
+                    f"openai_critic: HTTP 429 but plan is atomic at depth "
+                    f"{depth} — cannot split further. Response: {body_text}\n"
+                )
+                sys.exit(2)
+            sys.stderr.write(
+                f"openai_critic: TPM 429 at depth {depth}, splitting plan "
+                f"into {len(parts)} parts and retrying.\n"
+            )
+            sub_verdicts = [
+                call_openai(api_key, model, task, p, ledger, depth + 1)
+                for p in parts
+            ]
+            merged = _merge_verdicts(sub_verdicts)
+            merged["_chunks_submitted"] = sum(
+                v.get("_chunks_submitted", 1) for v in sub_verdicts
+            )
+            return merged
+        sys.stderr.write(f"openai_critic: HTTP {e.code} — {body_text}\n")
         sys.exit(2)
     except urllib.error.URLError as e:
         sys.stderr.write(f"openai_critic: network error — {e}\n")
@@ -260,6 +360,8 @@ def main() -> None:
     verdict = call_openai(api_key, model, task, plan, ledger)
     verdict["provider"] = "openai"
     verdict["model"] = model
+    # Surface chunk count so the caller can tell the plan was split.
+    verdict["chunks_submitted"] = verdict.pop("_chunks_submitted", 1)
 
     sys.stdout.write(json.dumps(verdict, ensure_ascii=False, indent=2))
     sys.stdout.write("\n")
