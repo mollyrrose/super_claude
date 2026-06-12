@@ -103,11 +103,26 @@ function Test-Command {
 }
 
 function Get-VramGB {
+    # P2.7: distinguish "no NVIDIA GPU" from "nvidia-smi present but
+    # returned unparseable output". The earlier `2>$null` + bare `catch {}`
+    # made a driver crash look identical to a Tier-E CPU-only box.
+    # Capture the full output into a variable so we can introspect it
+    # instead of piping into Select-Object (which loses error context).
+    # $LASTEXITCODE check is intentionally NOT used here — PowerShell's
+    # $LASTEXITCODE state is unreliable across function/pipeline
+    # boundaries and would generate confusing "exited with code ''" warnings
+    # in the common happy path. Parsing the first line is sufficient.
     if (-not (Test-Command 'nvidia-smi')) { return 0 }
     try {
-        $raw = & nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>$null | Select-Object -First 1
-        if ($raw -match '^\d+$') { return [math]::Round([int]$raw / 1024, 1) }
-    } catch {}
+        $raw = (& nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>&1) -join "`n"
+        $firstLine = ($raw -split "`r?`n")[0].Trim()
+        if ($firstLine -match '^\d+$') {
+            return [math]::Round([int]$firstLine / 1024, 1)
+        }
+        Write-Warn "nvidia-smi returned unparseable output: '$raw'. Treating as no GPU."
+    } catch {
+        Write-Warn "nvidia-smi invocation failed: $_"
+    }
     return 0
 }
 
@@ -269,10 +284,24 @@ if (Test-Path $VenvPython) {
 }
 
 $torchInstalled = $false
-try {
-    $torchVer = & $VenvPython -c "import torch; print(torch.__version__)" 2>$null
-    if ($LASTEXITCODE -eq 0 -and $torchVer -match 'cu126') { $torchInstalled = $true }
-} catch {}
+# P2.7: only probe if the venv python actually exists. If it doesn't, we
+# already know we need to install; no point catching a "file not found"
+# as a "torch not installed" signal.
+if (Test-Path $VenvPython) {
+    try {
+        $torchProbe = & $VenvPython -c "import torch; print(torch.__version__)" 2>&1
+        if ($LASTEXITCODE -eq 0 -and $torchProbe -match 'cu126') {
+            $torchVer = $torchProbe
+            $torchInstalled = $true
+        } elseif ($LASTEXITCODE -ne 0 -and $torchProbe -notmatch 'ModuleNotFoundError|ImportError') {
+            # Non-zero exit AND not the "module missing" path means
+            # python crashed for a real reason (corrupt venv, segfault).
+            Write-Warn "venv python probe non-zero: $($torchProbe -join ' ')"
+        }
+    } catch {
+        Write-Warn "torch probe failed: $_"
+    }
+}
 
 if ($torchInstalled) {
     Write-Skip ("torch already installed in venv ({0})" -f $torchVer.Trim())
@@ -293,10 +322,21 @@ Write-Step 'Install ComfyUI requirements'
 # Cheap check: see if a representative ComfyUI dep is in the venv. The req
 # file is large but installing into an up-to-date venv is fast (~1-2 min).
 $comfyDepOK = $false
-try {
-    & $VenvPython -c "import safetensors, kornia, transformers" 2>$null
-    if ($LASTEXITCODE -eq 0) { $comfyDepOK = $true }
-} catch {}
+# P2.7: same shape as the torch probe — only run if venv python exists
+# and surface non-ImportError crashes instead of silently treating them
+# as "not installed".
+if (Test-Path $VenvPython) {
+    try {
+        $depProbe = & $VenvPython -c "import safetensors, kornia, transformers" 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            $comfyDepOK = $true
+        } elseif ($depProbe -notmatch 'ModuleNotFoundError|ImportError') {
+            Write-Warn "venv dep probe non-zero exit, output: $($depProbe -join ' ')"
+        }
+    } catch {
+        Write-Warn "venv dep probe failed: $_"
+    }
+}
 
 if ($comfyDepOK) {
     Write-Skip 'ComfyUI requirements appear satisfied'
@@ -529,11 +569,16 @@ if ($installTH) {
         if (-not (Test-Path $ffmpegDir)) { New-Item -ItemType Directory -Force -Path $ffmpegDir | Out-Null }
         # Wipe any older essentials build (no DLLs)
         Get-ChildItem $ffmpegDir -File | Remove-Item -Force
-        # Extract bin/ contents (exes + DLLs) to flat ai_video/ffmpeg/
-        & $VenvPython -c @"
-import zipfile, os, shutil
-src = r'$sharedZip'
-dst = r'$ffmpegDir'
+        # Extract bin/ contents (exes + DLLs) to flat ai_video/ffmpeg/.
+        # P1 security fix from qRev review: pass the paths as argv instead
+        # of interpolating into a Python here-string. Even though $sharedZip
+        # and $ffmpegDir are derived from $PSScriptRoot today, a single
+        # quote or backslash sequence inside an install path would let
+        # PowerShell-level expansion inject Python source. Passing as argv
+        # closes that.
+        $extractScript = @'
+import sys, zipfile, os, shutil
+src, dst = sys.argv[1], sys.argv[2]
 with zipfile.ZipFile(src) as z:
     members = [m for m in z.namelist() if '/bin/' in m and m.endswith(('.exe', '.dll'))]
     for m in members:
@@ -541,8 +586,15 @@ with zipfile.ZipFile(src) as z:
         with z.open(m) as sf, open(target, 'wb') as df:
             shutil.copyfileobj(sf, df)
 print('extracted', len(members), 'files')
-"@ 2>&1 | Out-Null
-        Write-OK 'ffmpeg-shared installed (avcodec/avformat/etc DLLs in ai_video/ffmpeg/)'
+'@
+        $extractOutput = & $VenvPython -c $extractScript $sharedZip $ffmpegDir 2>&1
+        # P3 fix: surface non-zero exit code so a silent extraction
+        # failure doesn't sail past with a misleading [ok] line.
+        if ($LASTEXITCODE -ne 0) {
+            Write-Fail "ffmpeg extract failed (exit $LASTEXITCODE): $($extractOutput -join ' ')"
+            exit 1
+        }
+        Write-OK "ffmpeg-shared installed ($($extractOutput -join ' '))"
     }
 
     # Step 10b — clone custom nodes
@@ -576,13 +628,18 @@ print('extracted', len(members), 'files')
     }
 
     # Step 10d — downgrade transformers (FLOAT incompatible with 5.x)
-    $tver = & $VenvPython -c "import transformers; print(transformers.__version__)" 2>$null
-    if ($tver -match '^[0-4]\.') {
+    $tver = & $VenvPython -c "import transformers; print(transformers.__version__)" 2>&1
+    if ($LASTEXITCODE -eq 0 -and $tver -match '^[0-4]\.') {
         Write-Skip "transformers $($tver.Trim()) already <5"
     } else {
         Write-Host "  downgrading transformers to 4.x (FLOAT requires <5) ..."
-        & $VenvPython -m pip install --quiet 'transformers<5' 2>&1 | Out-Null
-        Write-OK 'transformers downgraded'
+        $dgOutput = & $VenvPython -m pip install --quiet 'transformers<5' 2>&1
+        # P3 fix: print the [ok] line only if pip actually succeeded.
+        if ($LASTEXITCODE -eq 0) {
+            Write-OK 'transformers downgraded'
+        } else {
+            Write-Warn "transformers downgrade failed (exit $LASTEXITCODE): $($dgOutput -join ' ')"
+        }
     }
 
     # Step 10e — Hungarian F5-TTS model
@@ -612,14 +669,27 @@ print('extracted', len(members), 'files')
         Write-OK 'FLOAT workflow copied to user/default/workflows/'
     }
 
-    # Step 10g — patch launcher.bat to prepend ai_video/ffmpeg/ to PATH
+    # Step 10g — patch launcher.bat to prepend ai_video/ffmpeg/ to PATH.
+    # P2.1 fix: the previous hard-coded `cd /d D:\projects\super_claude\...`
+    # regex would silently no-op on any install rooted somewhere else, and
+    # the user would hit the very torchcodec libtorchcodec_core8.dll error
+    # this patch is supposed to prevent. Build the regex from the actual
+    # $ComfyUIRoot value so it works regardless of where the repo lives.
     $launchTxt = Get-Content $LaunchBat -Raw
-    if ($launchTxt -notmatch 'ai_video\\ffmpeg') {
+    if ($launchTxt -notmatch [regex]::Escape($ffmpegDir)) {
+        $cdAnchor = "cd /d $ComfyUIRoot"
+        $escapedCd = [regex]::Escape($cdAnchor)
         $patched = $launchTxt -replace `
-            '(cd /d D:\\projects\\super_claude\\ai_video\\comfyui\r?\n)', `
+            "($escapedCd\r?\n)", `
             "`$1`r`nREM Talking-head pipeline: torchcodec needs ffmpeg shared DLLs on PATH.`r`nset `"PATH=$ffmpegDir;%PATH%`"`r`n"
-        Set-Content -Path $LaunchBat -Value $patched -Encoding ASCII
-        Write-OK 'launcher patched to prepend ffmpeg/ to PATH'
+        if ($patched -eq $launchTxt) {
+            # The replace didn't match — surface the failure instead of
+            # silently writing back the unchanged content.
+            Write-Warn ("launcher patch did NOT match. Expected anchor: '" + $cdAnchor + "'. Edit start_comfyui.bat manually to prepend " + $ffmpegDir + " to PATH.")
+        } else {
+            Set-Content -Path $LaunchBat -Value $patched -Encoding ASCII
+            Write-OK 'launcher patched to prepend ffmpeg/ to PATH'
+        }
     } else {
         Write-Skip 'launcher already includes ffmpeg PATH prefix'
     }

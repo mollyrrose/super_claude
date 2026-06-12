@@ -40,6 +40,7 @@ import json
 import os
 import sys
 import time
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -76,6 +77,8 @@ POLL_INTERVAL = 2.0  # seconds between /history checks
 
 WORKFLOW_TEMPLATE_NAME = "ltxv_t2v.json"
 FLOAT_WORKFLOW_NAME = "float_t2v.json"
+T2I_WORKFLOW_NAME = "t2i.json"
+I2V_WORKFLOW_NAME = "i2v.json"
 CLIENT_ID = str(uuid.uuid4())  # stable for this server lifetime
 
 # Emotion options supported by the FLOAT pipeline. "none" = no override
@@ -247,8 +250,19 @@ def _patch_float_workflow(
     if not isinstance(out, dict):
         raise ValueError("workflow root must be a JSON object (API format)")
 
+    # P2.2: separate branches (not elif) so a workflow with multiple
+    # LoadImage / LoadAudio nodes patches the FIRST one of each and leaves
+    # the rest alone — the original `elif` chain only visited one matching
+    # class_type per node. The set_* guards prevent us from accidentally
+    # overwriting subsequent matches.
+    # P2.2 (FPS): add a `set_fps` guard so a workflow with multiple
+    # PrimitiveFloat nodes (which IS plausible — confidence, seed
+    # multipliers, etc.) doesn't blanket-overwrite everything with the
+    # fps value.
     set_image = False
     set_audio = False
+    set_fps = False
+    set_emotion = False
     for _nid, node in out.items():
         if not isinstance(node, dict):
             continue
@@ -257,24 +271,210 @@ def _patch_float_workflow(
         if not isinstance(inputs, dict):
             continue
 
-        if ctype == "LoadImage" and "image" in inputs:
+        if ctype == "LoadImage" and "image" in inputs and not set_image:
             inputs["image"] = image_filename
             set_image = True
-        elif ctype == "LoadAudio" and "audio" in inputs:
+        if ctype == "LoadAudio" and "audio" in inputs and not set_audio:
             inputs["audio"] = audio_filename
             set_audio = True
-        elif ctype == "FloatProcess" and emotion and emotion != "none" and "emotion" in inputs:
+        if (
+            ctype == "FloatProcess"
+            and emotion
+            and emotion != "none"
+            and "emotion" in inputs
+            and not set_emotion
+        ):
             inputs["emotion"] = emotion
-        elif ctype == "PrimitiveFloat" and "value" in inputs:
+            set_emotion = True
+        if ctype == "PrimitiveFloat" and "value" in inputs and not set_fps:
             # Heuristic: the FPS node is the only PrimitiveFloat in the
-            # shipped FLOAT workflow. If a future workflow adds others,
-            # this picks the first one — that's fine in practice.
+            # shipped FLOAT workflow. The `set_fps` guard scopes the
+            # heuristic to one node so a future workflow with multiple
+            # PrimitiveFloat nodes still works correctly for the first.
             inputs["value"] = float(fps)
+            set_fps = True
 
     if not set_image:
         raise ValueError("FLOAT workflow has no LoadImage node — wrong template?")
     if not set_audio:
         raise ValueError("FLOAT workflow has no LoadAudio node — wrong template?")
+    return out
+
+
+# ---------------------------------------------------------------------------
+# T2I (text-to-image) workflow loading + patching
+# ---------------------------------------------------------------------------
+
+def _load_t2i_workflow() -> dict:
+    """Load the user's saved T2I workflow (API format)."""
+    path = WORKFLOW_DIR / T2I_WORKFLOW_NAME
+    if not path.exists():
+        raise FileNotFoundError(
+            f"No T2I workflow at {path}. In ComfyUI UI, pick a "
+            f"text-to-image template (e.g. Flux.1 Schnell, Z-Image-Turbo, "
+            f"or any SD checkpoint), set the prompt to something non-empty, "
+            f"then use Workflow -> Export (API) to write to that exact "
+            f"path. Then retry."
+        )
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _patch_t2i_workflow(
+    workflow: dict, prompt: str, width: int, height: int, steps: int
+) -> dict:
+    """Patch a copy of the T2I workflow: prompt, dimensions, steps.
+
+    Strategy mirrors `_patch_workflow` (LTX T2V) but targets image latent
+    classes. Each patched node has a `set_*` guard so multi-encoder
+    workflows (e.g. Flux's dual CLIP + T5) get exactly the FIRST
+    positive-prompt encoder filled in, leaving the negative-prompt
+    encoder alone.
+    """
+    out = copy.deepcopy(workflow)
+    if not isinstance(out, dict):
+        raise ValueError("workflow root must be a JSON object (API format)")
+    set_prompt = False
+    set_dims = False
+    set_steps = False
+    for _nid, node in out.items():
+        if not isinstance(node, dict):
+            continue
+        ctype = node.get("class_type", "")
+        inputs = node.get("inputs")
+        if not isinstance(inputs, dict):
+            continue
+
+        if (
+            not set_prompt
+            and ctype in ("CLIPTextEncode", "T5TextEncode")
+            and isinstance(inputs.get("text"), str)
+            and inputs.get("text", "").strip()
+        ):
+            inputs["text"] = prompt
+            set_prompt = True
+
+        if (
+            ctype in ("EmptyLatentImage", "EmptySD3LatentImage", "ModelSamplingFlux")
+            and not set_dims
+        ):
+            if "width" in inputs:
+                inputs["width"] = width
+            if "height" in inputs:
+                inputs["height"] = height
+            set_dims = True
+
+        if (
+            ctype in ("KSampler", "KSamplerAdvanced", "BasicScheduler")
+            and "steps" in inputs
+            and not set_steps
+        ):
+            inputs["steps"] = steps
+            set_steps = True
+
+    if not set_prompt:
+        raise ValueError(
+            "T2I workflow has no positive-prompt text-encoder node with "
+            "non-empty default text — make sure the saved template has a "
+            "CLIPTextEncode / T5TextEncode with placeholder text."
+        )
+    return out
+
+
+# ---------------------------------------------------------------------------
+# I2V (image-to-video) workflow loading + patching
+# ---------------------------------------------------------------------------
+
+def _load_i2v_workflow() -> dict:
+    """Load the user's saved I2V workflow (API format)."""
+    path = WORKFLOW_DIR / I2V_WORKFLOW_NAME
+    if not path.exists():
+        raise FileNotFoundError(
+            f"No I2V workflow at {path}. In ComfyUI UI, pick an "
+            f"image-to-video template (e.g. LTX-Video Image to Video, "
+            f"Wan 2.2 I2V, Hunyuan I2V), then use Workflow -> Export "
+            f"(API) to write to that exact path. Then retry."
+        )
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _patch_i2v_workflow(
+    workflow: dict,
+    image_filename: str,
+    prompt: str,
+    width: int,
+    height: int,
+    length_frames: int,
+    steps: int,
+) -> dict:
+    """Patch a copy of the I2V workflow.
+
+    LoadImage = reference frame. First text-encoder = motion / scene
+    description. Same dimensions / length / steps patching pattern as
+    the FLOAT and T2V patchers.
+    """
+    out = copy.deepcopy(workflow)
+    if not isinstance(out, dict):
+        raise ValueError("workflow root must be a JSON object (API format)")
+    set_image = False
+    set_prompt = False
+    set_dims = False
+    set_steps = False
+    for _nid, node in out.items():
+        if not isinstance(node, dict):
+            continue
+        ctype = node.get("class_type", "")
+        inputs = node.get("inputs")
+        if not isinstance(inputs, dict):
+            continue
+
+        if ctype == "LoadImage" and "image" in inputs and not set_image:
+            inputs["image"] = image_filename
+            set_image = True
+
+        if (
+            not set_prompt
+            and ctype in ("CLIPTextEncode", "T5TextEncode")
+            and isinstance(inputs.get("text"), str)
+            and inputs.get("text", "").strip()
+        ):
+            inputs["text"] = prompt
+            set_prompt = True
+
+        if (
+            ctype in (
+                "EmptyLatentVideo",
+                "EmptyHunyuanLatentVideo",
+                "LTXVideoLatent",
+                "EmptyLTXVLatentVideo",
+            )
+            and not set_dims
+        ):
+            if "width" in inputs:
+                inputs["width"] = width
+            if "height" in inputs:
+                inputs["height"] = height
+            if "length" in inputs:
+                inputs["length"] = length_frames
+            if "num_frames" in inputs:
+                inputs["num_frames"] = length_frames
+            set_dims = True
+
+        if (
+            ctype in ("KSampler", "KSamplerAdvanced", "LTXVScheduler", "BasicScheduler")
+            and "steps" in inputs
+            and not set_steps
+        ):
+            inputs["steps"] = steps
+            set_steps = True
+
+    if not set_image:
+        raise ValueError("I2V workflow has no LoadImage node — wrong template?")
+    if not set_prompt:
+        raise ValueError(
+            "I2V workflow has no positive-prompt text-encoder node — "
+            "make sure the saved template has a CLIPTextEncode / "
+            "T5TextEncode with non-empty default text."
+        )
     return out
 
 
@@ -295,12 +495,30 @@ def _wait_for_completion(prompt_id: str) -> dict:
     """Poll /history/<prompt_id> until the entry shows up + has outputs.
 
     Returns the history entry dict. Raises TimeoutError after POLL_TIMEOUT.
+
+    P2.4: a consecutive-URLError counter surfaces a stderr warning after
+    10 retries in a row, so a ComfyUI crash mid-generation produces an
+    operator-visible signal instead of silently retrying for the full
+    15-minute timeout.
     """
     deadline = time.monotonic() + POLL_TIMEOUT
+    consecutive_url_errors = 0
+    warned = False
     while time.monotonic() < deadline:
         try:
             history = _http_get(f"/history/{prompt_id}")
-        except urllib.error.URLError:
+            consecutive_url_errors = 0
+            warned = False
+        except urllib.error.URLError as e:
+            consecutive_url_errors += 1
+            if consecutive_url_errors >= 10 and not warned:
+                sys.stderr.write(
+                    f"comfyui_mcp: {consecutive_url_errors} consecutive poll "
+                    f"failures contacting {COMFYUI_URL} (last: {e}). ComfyUI "
+                    f"may have crashed; will keep retrying until "
+                    f"POLL_TIMEOUT={POLL_TIMEOUT}s.\n"
+                )
+                warned = True
             time.sleep(POLL_INTERVAL)
             continue
         entry = history.get(prompt_id)
@@ -384,6 +602,55 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {"prompt_id": {"type": "string"}},
                 "required": ["prompt_id"],
+            },
+        ),
+        Tool(
+            name="generate_image",
+            description=(
+                "Generate a still image on the local ComfyUI using a saved "
+                "text-to-image workflow (Flux / Z-Image-Turbo / SD checkpoint "
+                "/ etc.). Requires a user-saved workflow JSON at "
+                "ai_video/workflows/t2i.json (Export API from the UI once). "
+                "Returns the absolute path to the generated PNG."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "prompt": {"type": "string", "description": "Positive prompt"},
+                    "width": {"type": "integer", "default": 1024},
+                    "height": {"type": "integer", "default": 1024},
+                    "steps": {"type": "integer", "default": 20},
+                },
+                "required": ["prompt"],
+            },
+        ),
+        Tool(
+            name="generate_image_to_video",
+            description=(
+                "Animate a still image into a video on the local ComfyUI "
+                "using a saved image-to-video workflow (LTX I2V, Wan 2.2 "
+                "I2V, Hunyuan I2V, etc.). Requires a user-saved workflow "
+                "JSON at ai_video/workflows/i2v.json. The reference image "
+                "must already exist inside ai_video/comfyui/input/ — this "
+                "tool does not upload."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "image_filename": {
+                        "type": "string",
+                        "description": "Bare filename of the reference image in ai_video/comfyui/input/",
+                    },
+                    "prompt": {
+                        "type": "string",
+                        "description": "Motion / scene description to drive the animation",
+                    },
+                    "width": {"type": "integer", "default": 832},
+                    "height": {"type": "integer", "default": 480},
+                    "length_frames": {"type": "integer", "default": 121},
+                    "steps": {"type": "integer", "default": 20},
+                },
+                "required": ["image_filename", "prompt"],
             },
         ),
         Tool(
@@ -473,6 +740,62 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             resp = _http_post("/queue", {"delete": [pid]})
             return _ok({"deleted": pid, "response": resp})
 
+        if name == "generate_image":
+            prompt = arguments.get("prompt", "").strip()
+            if not prompt:
+                return _err("prompt is required and must be non-empty")
+            width = int(arguments.get("width", 1024))
+            height = int(arguments.get("height", 1024))
+            steps = int(arguments.get("steps", 20))
+
+            template = _load_t2i_workflow()
+            patched = _patch_t2i_workflow(template, prompt, width, height, steps)
+            t0 = time.monotonic()
+            prompt_id = _submit_workflow(patched)
+            entry = _wait_for_completion(prompt_id)
+            paths = _extract_output_paths(entry)
+            dt = time.monotonic() - t0
+            return _ok({
+                "prompt_id": prompt_id,
+                "duration_s": round(dt, 1),
+                "outputs": paths,
+                "workflow_template": str(WORKFLOW_DIR / T2I_WORKFLOW_NAME),
+            })
+
+        if name == "generate_image_to_video":
+            image_name = arguments.get("image_filename", "").strip()
+            prompt = arguments.get("prompt", "").strip()
+            if not image_name:
+                return _err("image_filename is required (file must exist in ai_video/comfyui/input/)")
+            if not prompt:
+                return _err("prompt is required (describes the motion / scene change)")
+            # Same path-traversal guard as generate_talking_head — bare filename only.
+            if "/" in image_name or "\\" in image_name or image_name.startswith(".."):
+                return _err(
+                    f"image_filename must be a bare filename (no slashes, no '..'). "
+                    f"Got: {image_name!r}"
+                )
+            width = int(arguments.get("width", 832))
+            height = int(arguments.get("height", 480))
+            length_frames = int(arguments.get("length_frames", 121))
+            steps = int(arguments.get("steps", 20))
+
+            template = _load_i2v_workflow()
+            patched = _patch_i2v_workflow(
+                template, image_name, prompt, width, height, length_frames, steps
+            )
+            t0 = time.monotonic()
+            prompt_id = _submit_workflow(patched)
+            entry = _wait_for_completion(prompt_id)
+            paths = _extract_output_paths(entry)
+            dt = time.monotonic() - t0
+            return _ok({
+                "prompt_id": prompt_id,
+                "duration_s": round(dt, 1),
+                "outputs": paths,
+                "workflow_template": str(WORKFLOW_DIR / I2V_WORKFLOW_NAME),
+            })
+
         if name == "generate_talking_head":
             image_name = arguments.get("image_filename", "").strip()
             audio_name = arguments.get("audio_filename", "").strip()
@@ -483,6 +806,17 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 return _err("image_filename is required (file must exist in ai_video/comfyui/input/)")
             if not audio_name:
                 return _err("audio_filename is required (file must exist in ai_video/comfyui/input/)")
+            # P2.3: defensive path-traversal check. ComfyUI internally
+            # resolves these relative to its input/ folder and is supposed
+            # to sandbox there, but a stripped filename is cheap insurance
+            # and makes the contract explicit ("we only accept a bare
+            # filename, no slashes").
+            for arg_name, val in (("image_filename", image_name), ("audio_filename", audio_name)):
+                if "/" in val or "\\" in val or val.startswith(".."):
+                    return _err(
+                        f"{arg_name} must be a bare filename (no slashes, "
+                        f"no '..'). Got: {val!r}"
+                    )
             if emotion not in FLOAT_EMOTIONS:
                 return _err(f"emotion must be one of {list(FLOAT_EMOTIONS)}")
 
@@ -510,7 +844,21 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             f"Cannot reach ComfyUI at {COMFYUI_URL}: {e}. Is start_comfyui.bat "
             f"running? Default URL is http://127.0.0.1:8188."
         )
+    except json.JSONDecodeError as e:
+        # Malformed workflow file or unexpected response shape from ComfyUI.
+        traceback.print_exc(file=sys.stderr)
+        return _err(f"JSON decode error: {e}. Check the workflow template syntax.")
+    except ValueError as e:
+        # Patcher complains about wrong-shape templates or bad inputs.
+        traceback.print_exc(file=sys.stderr)
+        return _err(f"ValueError: {e}")
     except Exception as e:
+        # P1.2: surface the full traceback on stderr so operators see what
+        # actually broke instead of an opaque tool-error JSON. The bare
+        # except still returns a clean error to Claude Code so the tool
+        # call doesn't crash the MCP server, but the trace is now in
+        # ComfyUI's stderr stream where it's findable.
+        traceback.print_exc(file=sys.stderr)
         return _err(f"{type(e).__name__}: {e}")
 
 

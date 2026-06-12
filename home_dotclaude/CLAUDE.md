@@ -19,6 +19,29 @@ thinking: enabled
 - State the file you're editing and the reason in one short sentence.
 - Keep the diff scoped to the change at hand.
 
+## Plain-language questions to the user
+
+When I ASK the user a question — clarifying question, multiple-choice
+prompt, yes/no, approval gate, "which option" — phrase the question so a
+sharp 17-year-old understands it without prior context. That means:
+
+- Plain words, not jargon. If a technical term must appear, explain it
+  in the same sentence ("TPM = how many tokens the API lets through per
+  minute").
+- Short sentences. One idea per sentence.
+- Concrete examples instead of abstract trade-offs ("Option A finishes
+  in 5 minutes but uses 20 GB of disk" rather than "Option A trades
+  storage for latency").
+- No slang, no idioms that depend on cultural reference, no winking
+  shorthand. Plain prose only.
+- Match the user's language. If the conversation is Hungarian, the
+  question is Hungarian.
+
+This applies only to questions I ASK the user, not to my regular
+explanations, reasoning aloud, or technical responses to a question they
+asked me. It is NOT permission to dumb down code, reviews, or commit
+messages.
+
 ## User input visibility — ALWAYS announce when waiting
 
 When a reply ends with a question, a choice, or any other prompt that

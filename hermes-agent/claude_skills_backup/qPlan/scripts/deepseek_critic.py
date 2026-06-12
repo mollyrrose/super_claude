@@ -46,10 +46,20 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+
+# Shared chunking helpers (see plan_chunker.py — same module imported by
+# openai_critic.py so a fix to splitting/merging logic applies to both).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from plan_chunker import (  # noqa: E402
+    MAX_CHUNK_DEPTH,
+    merge_verdicts,
+    split_plan,
+)
 
 CRITIC_PROMPT = """You are the DeepSeek critic in a qPlan author<->critic loop.
 
@@ -110,10 +120,20 @@ def _list_models(api_key: str) -> list[str]:
 
 
 def _pick_best(available: list[str]) -> str | None:
+    # Same stable-alias preference as openai_critic._pick_best so the two
+    # critics stay structurally consistent. DeepSeek's current model names
+    # are all undated literals (deepseek-v4-pro, deepseek-v4-flash, etc.),
+    # so the dated-snapshot branch is dormant today — but if DeepSeek ever
+    # ships a dated variant (deepseek-v4-pro-2026-09-01), this picks the
+    # latest one.
     for pattern in MODEL_PRIORITY:
         matches = [m for m in available if pattern.match(m)]
-        if matches:
-            return matches[0]
+        if not matches:
+            continue
+        stable = [m for m in matches if not re.search(r"-\d{4}-\d{2}-\d{2}$", m)]
+        if stable:
+            return stable[0]
+        return sorted(matches)[-1]
     return None
 
 
@@ -151,8 +171,10 @@ def _write_cache(model: str, available_count: int) -> None:
             ),
             encoding="utf-8",
         )
-    except OSError:
-        pass
+    except OSError as e:
+        # Non-fatal but surface on stderr so a full-disk storm leaves a
+        # trace. P3 in the qRev pass.
+        sys.stderr.write(f"deepseek_critic: cache write failed (non-fatal): {e}\n")
 
 
 def discover_model(api_key: str) -> str:
@@ -163,7 +185,18 @@ def discover_model(api_key: str) -> str:
 
     try:
         available = _list_models(api_key)
-    except (urllib.error.HTTPError, urllib.error.URLError):
+    except urllib.error.HTTPError as e:
+        # P2.5: 401/403 = bad key → fail loud. Other HTTPError = transient
+        # → accept stale cache.
+        if e.code in (401, 403):
+            sys.stderr.write(
+                f"deepseek_critic: /v1/models returned HTTP {e.code} — bad or "
+                f"revoked DEEPSEEK_API_KEY. Fix the key and retry.\n"
+            )
+            sys.exit(2)
+        stale = _read_cache(allow_stale=True)
+        return stale or HARD_FALLBACK_MODEL
+    except urllib.error.URLError:
         stale = _read_cache(allow_stale=True)
         return stale or HARD_FALLBACK_MODEL
 
@@ -172,58 +205,12 @@ def discover_model(api_key: str) -> str:
     return best
 
 
-# --- Chunking on HTTP 429 -------------------------------------------------
-#
-# Defensive: DeepSeek caps concurrency, not TPM, but a single call can
-# still 429 on server overload or unannounced per-tier TPM. Pattern is
-# identical to the OpenAI critic — split plan on Markdown headers,
-# recurse, merge verdicts.
-
-MAX_CHUNK_DEPTH = 4
-VERDICT_SEVERITY = {"major issue": 0, "minor issue": 1, "no material issue": 2}
-
-
-def _split_plan(plan: str) -> list[str]:
-    """Same as openai_critic._split_plan — kept inline to avoid a shared
-    helper module on the path."""
-    lines = plan.splitlines(keepends=True)
-    for prefix in ("## ", "### "):
-        starts = [i for i, ln in enumerate(lines) if ln.startswith(prefix)]
-        if len(starts) >= 2:
-            mid_idx = starts[len(starts) // 2]
-            return ["".join(lines[:mid_idx]), "".join(lines[mid_idx:])]
-    if len(lines) >= 4:
-        mid = len(lines) // 2
-        for offset in range(0, mid):
-            for sign in (-1, 1):
-                idx = mid + sign * offset
-                if 0 < idx < len(lines) and lines[idx].strip() == "":
-                    return ["".join(lines[:idx]), "".join(lines[idx:])]
-    if len(lines) <= 1:
-        return [plan]
-    mid = len(lines) // 2
-    return ["".join(lines[:mid]), "".join(lines[mid:])]
-
-
-def _merge_verdicts(sub_verdicts: list[dict]) -> dict:
-    seen_texts: set = set()
-    suggestions: list = []
-    worst = 2
-    for v in sub_verdicts:
-        sub = VERDICT_SEVERITY.get(v.get("verdict", "no material issue"), 2)
-        if sub < worst:
-            worst = sub
-        for s in v.get("suggestions", []) or []:
-            text = s.get("text", "").strip()
-            if not text or text in seen_texts:
-                continue
-            seen_texts.add(text)
-            suggestions.append(s)
-    verdict_str = next(k for k, v in VERDICT_SEVERITY.items() if v == worst)
-    return {"verdict": verdict_str, "suggestions": suggestions}
-
-
 # --- Chat call ------------------------------------------------------------
+#
+# Same retry layer as openai_critic.py — see the comment block there.
+
+MAX_TOTAL_CHUNKS = 8
+_total_chunks_submitted = 0
 
 
 def call_deepseek(
@@ -234,6 +221,8 @@ def call_deepseek(
     ledger: list,
     depth: int = 0,
 ) -> dict:
+    global _total_chunks_submitted
+    _total_chunks_submitted += 1
     payload = {
         "model": model,
         "messages": [
@@ -263,35 +252,62 @@ def call_deepseek(
             body = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         body_text = e.read().decode("utf-8", "replace")
-        if e.code == 429 and depth < MAX_CHUNK_DEPTH:
-            parts = _split_plan(plan)
+        if (
+            e.code == 429
+            and depth < MAX_CHUNK_DEPTH
+            and _total_chunks_submitted < MAX_TOTAL_CHUNKS
+        ):
+            parts = split_plan(plan)
             if len(parts) < 2:
                 sys.stderr.write(
                     f"deepseek_critic: HTTP 429 but plan is atomic at depth "
                     f"{depth} — cannot split further. Response: {body_text}\n"
                 )
                 sys.exit(2)
+            sleep_s = 2 ** depth
             sys.stderr.write(
-                f"deepseek_critic: 429 at depth {depth}, splitting plan "
-                f"into {len(parts)} parts and retrying.\n"
+                f"deepseek_critic: 429 at depth {depth}, splitting plan into "
+                f"{len(parts)} parts and retrying after {sleep_s}s.\n"
             )
+            time.sleep(sleep_s)
             sub_verdicts = [
                 call_deepseek(api_key, model, task, p, ledger, depth + 1)
                 for p in parts
             ]
-            merged = _merge_verdicts(sub_verdicts)
+            merged = merge_verdicts(sub_verdicts)
             merged["_chunks_submitted"] = sum(
                 v.get("_chunks_submitted", 1) for v in sub_verdicts
             )
             return merged
+        if e.code == 429:
+            sys.stderr.write(
+                f"deepseek_critic: HTTP 429 but chunk budget exhausted "
+                f"(depth={depth}, total_chunks={_total_chunks_submitted}, "
+                f"cap={MAX_TOTAL_CHUNKS}). Response: {body_text}\n"
+            )
+            sys.exit(2)
         sys.stderr.write(f"deepseek_critic: HTTP {e.code} — {body_text}\n")
         sys.exit(2)
     except urllib.error.URLError as e:
         sys.stderr.write(f"deepseek_critic: network error — {e}\n")
         sys.exit(2)
 
-    content = body["choices"][0]["message"]["content"]
-    return json.loads(content)
+    # P1.1: guard response-shape access.
+    try:
+        content = body["choices"][0]["message"]["content"]
+        return json.loads(content)
+    except (KeyError, IndexError, TypeError) as e:
+        sys.stderr.write(
+            f"deepseek_critic: unexpected response shape ({type(e).__name__}: "
+            f"{e}). Raw body: {json.dumps(body)[:1000]}\n"
+        )
+        sys.exit(2)
+    except json.JSONDecodeError as e:
+        sys.stderr.write(
+            f"deepseek_critic: response content was not valid JSON: {e}. "
+            f"Raw content: {content[:1000] if isinstance(content, str) else content}\n"
+        )
+        sys.exit(2)
 
 
 def main() -> None:
