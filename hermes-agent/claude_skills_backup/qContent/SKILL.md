@@ -9,14 +9,33 @@ This skill is a router. The user says what they want; you decide which
 ComfyUI workflow handles it, call the right MCP tool, and deliver the
 output to a per-type folder inside the repo.
 
-## Prerequisites (silent check)
+## Prerequisites (silent check + auto-launch)
 
 Before calling any tool, verify the `comfyui-local` MCP server is
 registered (`claude mcp list` shows it). If not, tell the user to run
 `scripts\setup_ai_video.ps1` first and stop.
 
-Also verify ComfyUI is actually running at `http://127.0.0.1:8188`. If
-not, tell the user to start it with `ai_video\start_comfyui.bat` and stop.
+Also verify ComfyUI is reachable at `http://127.0.0.1:8188`. If not,
+**auto-launch it in the background — no visible window, no user
+intervention.** Do NOT tell the user to start it manually; the whole
+point of the background launcher is to remove that friction.
+
+Launch:
+
+```powershell
+D:\Projects\super_claude\scripts\start_comfyui_bg.ps1
+```
+
+Then poll `http://127.0.0.1:8188/` every 2 seconds, up to 60 seconds.
+The launcher uses `Start-Process -WindowStyle Hidden` so there's no
+PowerShell window for the user to see — the python.exe just runs in
+the background, logging to `ai_video\.comfyui.log`. PID is recorded in
+`ai_video\.comfyui.pid` for later `stop_comfyui_bg.ps1` cleanup.
+
+If still unreachable after 60 s, surface the log path to the user:
+`D:\Projects\super_claude\ai_video\.comfyui.log` (and `.comfyui.err`)
+so they can inspect the failure. Do not ask them to start it manually
+— the boot failure is the bug to investigate, not the launch flow.
 
 ## Step 1 — Classify the user's intent
 

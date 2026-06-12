@@ -16,6 +16,14 @@ Four steps, each independently skippable:
    Both hooks do zero LLM work. Cost: $0. The actual analysis is done
    by Claude itself when the user runs ``/hermes-curate``.
 
+3b. **Permission allowlist** -- pre-authorizes /qClose and hermes-learn
+   writes inside ~/.claude/ so the user doesn't see the recurring
+   "allow Claude to edit its own settings" prompt every close. The
+   patterns added are scoped to .qclose_*.* files and
+   skills/hermes-auto-** (both backslash + forward-slash variants).
+   Gated on the same --skip-hooks flag because both manipulate
+   settings.json.
+
 4. **Optional API keys** -- interactive prompt for OPENAI_API_KEY and
    DEEPSEEK_API_KEY, stored in ~/.claude/settings.json's ``env`` block
    (Claude-Code-scoped; never leaks to other Windows applications). Used
@@ -356,6 +364,80 @@ def register_hooks(dry_run: bool) -> bool:
     return True
 
 
+def _qclose_permission_patterns() -> list[str]:
+    """Pre-authorize /qClose + hermes-learn writes inside ~/.claude/.
+
+    Claude Code's built-in guard prompts the user with "Yes, and allow
+    Claude to edit its own settings for this session" whenever Write /
+    Edit targets a path under the Claude config dir (~/.claude/). For
+    /qClose this fires every single close (writing .qclose_index.jsonl
+    and .qclose_resume_<sessid6>.md), and for hermes-learn it fires every
+    time an auto-skill is captured. Both are intentional behaviours the
+    user has already approved at the workflow level.
+
+    Returns Write/Edit allowlist patterns for the two known qClose paths
+    AND the hermes-learn auto-skill output dir. Both backslash and
+    forward-slash variants are emitted so the matcher hits regardless of
+    how the path is normalized at call time.
+    """
+    home = Path.home() / ".claude"
+    home_bs = str(home)
+    home_fs = home_bs.replace("\\", "/")
+
+    patterns: list[str] = []
+    for prefix, sep in ((home_bs, "\\"), (home_fs, "/")):
+        # qClose state files: .qclose_index.jsonl, .qclose_resume_*.md
+        patterns.append(f"Write({prefix}{sep}.qclose_*)")
+        patterns.append(f"Edit({prefix}{sep}.qclose_*)")
+        # hermes-learn auto-captured skills
+        patterns.append(f"Write({prefix}{sep}skills{sep}hermes-auto-**)")
+        patterns.append(f"Edit({prefix}{sep}skills{sep}hermes-auto-**)")
+    return patterns
+
+
+def register_permissions(dry_run: bool) -> bool:
+    """Step 3b -- ensure permissions.allow contains the qClose +
+    hermes-learn path patterns so the user never sees the "allow Claude
+    to edit its own settings" prompt during a /qClose run.
+
+    Idempotent: patterns already present are skipped. Patterns are stored
+    in addition to the broader Write(*) / Edit(*) wildcards because the
+    built-in guard for ~/.claude/ paths is not bypassed by wildcards
+    alone -- explicit path-prefixed entries are needed.
+    """
+    settings = load_settings()
+    perms = settings.setdefault("permissions", {})
+    if not isinstance(perms, dict):
+        warn(
+            f"permissions block is {type(perms).__name__}, expected dict "
+            f"-- skipping permission registration"
+        )
+        return False
+    allow = perms.setdefault("allow", [])
+    if not isinstance(allow, list):
+        warn(
+            f"permissions.allow is {type(allow).__name__}, expected list "
+            f"-- skipping permission registration"
+        )
+        return False
+
+    added = 0
+    for pattern in _qclose_permission_patterns():
+        if pattern not in allow:
+            allow.append(pattern)
+            added += 1
+
+    if added == 0:
+        info("qClose + hermes-learn permission patterns already registered")
+    else:
+        ok(
+            f"added {added} permission pattern(s) so /qClose + hermes-learn "
+            f"don't trigger the 'edit own settings' prompt"
+        )
+    save_settings(settings, dry_run=dry_run)
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-skills", action="store_true")
@@ -409,6 +491,17 @@ def main() -> int:
         info("[3] skipped (--skip-hooks)")
 
     print()
+    perms_ok = True
+    if not args.skip_hooks:
+        # Gated on --skip-hooks because both manipulate settings.json. If
+        # the user skips hook registration they probably don't want us
+        # touching the permissions block either.
+        print("[3b] Pre-authorizing /qClose + hermes-learn writes in permissions.allow")
+        perms_ok = register_permissions(dry_run=args.dry_run)
+    else:
+        info("[3b] skipped (--skip-hooks)")
+
+    print()
     api_keys_ok = True
     if not args.skip_api_keys:
         try:
@@ -422,7 +515,7 @@ def main() -> int:
         info(f"    {CC_SETTINGS_PATH} ('env' block)")
 
     print()
-    if converter_rc == 0 and curate_ok and hooks_ok and api_keys_ok:
+    if converter_rc == 0 and curate_ok and hooks_ok and perms_ok and api_keys_ok:
         ok("Install finished.")
         print()
         print("Next steps:")

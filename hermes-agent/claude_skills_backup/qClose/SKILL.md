@@ -121,8 +121,11 @@ parent_repo: <only if is_worktree, abs path>
 # RESUME ACTION REQUIRED — read this first
 
 > Paste this entire file into a fresh Claude Code window.
-> The window MUST be opened in the EXPECTED CWD below — if it isn't,
-> STOP and reopen Claude there before reading any further.
+> Opening Claude in the EXPECTED CWD below is the IDEAL path. If the
+> window happens to be in another directory, STEP 0 below will
+> automatically switch to abs-path + `git -C` mode and continue —
+> the resume file is designed for cross-tree continuation, not for
+> blocking. Do NOT ask the user to reopen Claude; just adapt.
 
 ## STEP 0 — verify environment (mandatory, do NOT skip)
 
@@ -136,24 +139,79 @@ parent_repo: <only if is_worktree, abs path>
 Run these three checks BEFORE anything else:
 
 ```powershell
-# 1. CWD check
+# 1. CWD check — WARN + adapt, do NOT stop
+# The resume file is designed for cross-tree continuation. If the
+# current shell is NOT in the expected_cwd, we switch to abs-path +
+# git -C "<expected_cwd>" mode for the rest of the session. Stopping
+# and asking the user to reopen Claude defeats the whole point of
+# qClose, which exists to enable continuation.
 $expected = "<expected_cwd>"
-if ((Get-Location).Path -ne $expected) {
-  Write-Error "WRONG CWD. Open Claude Code at $expected and re-paste."
+$cwdMismatch = ((Get-Location).Path -ne $expected)
+if ($cwdMismatch) {
+  Write-Warning @"
+CWD mismatch — adapting, NOT stopping.
+  current : $((Get-Location).Path)
+  expected: $expected
+
+Continuing from this window. Operating rules from here on:
+- File edits use ABSOLUTE paths inside $expected.
+- Git commands target the expected tree via:  git -C "$expected" <...>
+- Worktree-cleanup / merge / INDEX-update steps that legitimately
+  live in the PARENT repo (when expected is a worktree) are run
+  from the parent's path with its own git -C.
+
+Do NOT ask the user "should I continue here or reopen elsewhere?" —
+the answer is always "continue here". That's the qClose contract.
+"@
 }
-# 2. Branch check
-$branch = (git rev-parse --abbrev-ref HEAD).Trim()
+# 2. Branch check — use git -C against the expected tree, NOT $PWD,
+# so the check is meaningful even when CWD mismatched above.
+$branch = (git -C "$expected" rev-parse --abbrev-ref HEAD).Trim()
 if ($branch -ne "<branch>") {
-  Write-Error "WRONG BRANCH. Expected <branch>, got $branch. Stop."
+  Write-Error @"
+WRONG BRANCH at $expected. Expected <branch>, got $branch.
+
+This is a HARD STOP: the expected tree no longer holds the branch the
+qClose was written for. Another window or a human likely switched the
+worktree's HEAD. Surface this to the user and ask which branch the
+session should resume on before doing anything else.
+"@
 }
 # 3. HEAD check (warn if drifted, do not stop — another window may have committed)
-$head = (git rev-parse --short HEAD).Trim()
+$head = (git -C "$expected" rev-parse --short HEAD).Trim()
 if ($head -ne "<short_hash>") {
-  Write-Warning "HEAD drifted: expected <short_hash>, got $head. Concurrent window may have committed."
+  Write-Warning "HEAD drifted at ${expected}: expected <short_hash>, got $head. Concurrent window may have committed."
 }
 ```
 
-If any check fails, STOP — fix the environment, then re-paste this file. Do NOT improvise.
+Failure semantics:
+
+- **Check 1 (CWD)** is a soft warn → adapt to abs-paths + `git -C`. Continue.
+- **Check 2 (branch)** is a HARD stop → the expected tree no longer holds the expected branch; surface to user and wait for instruction.
+- **Check 3 (HEAD)** is a soft warn → another window committed; keep going.
+
+The user does NOT want a yes/no prompt for any of the soft checks. The qClose hand-off exists precisely to make continuation frictionless.
+
+## STEP 0b — project orientation (read FIRST, then continue)
+
+Before resuming the actual work, briefly orient yourself in this project — the same files /qRem would have you read at session start, but interpreted through the qClose lens (worktree-aware, window-aware). These files give you the project's conventions and the cross-session state; they are CONTEXT, not the task. Do NOT let them overshadow the "What this window was doing" section below — that section is the source of truth for what this resumed session must continue.
+
+Read whichever of these exist at `<expected_cwd>`:
+
+- `INDEX.md`  — project overview / structure (treat as static reference)
+- `STARTUP.md`  — boot ritual / environment setup, if any
+- `TODO.md`, `tot.md`, `TODOS.md`  — cross-session task lists
+- `AGENTS.md`  — binding work contract for this subtree; walk the chain down to any path you intend to edit and read every AGENTS.md on the route, per global CLAUDE.md "AGENTS.md handling"
+- `CLAUDE.md`  — Claude-specific additive rules at root (the global `~/.claude/CLAUDE.md` is always already loaded; don't re-read it)
+
+**qClose-lens reading rules** — apply these while skimming the above:
+
+- **TODO entries are window-owned.** Per CLAUDE.md "Shared TODO files — per-window entries only", each TODO line carries a `[w-<code>]` tag plus `pid:`/`host:`/`start:`/`hb:` for liveness. Entries owned by OTHER windows are NOT yours to take over unless the live process is dead AND on this host (see "Liveness check + takeover protocol"). On resume, refresh your own `[w-<window_code>]` entries' `hb:` to the current time before doing any other work.
+- **Worktree awareness.** If `is_worktree: true` in the frontmatter above, you are in a feature worktree. INDEX.md / STARTUP.md describe the parent repo and may not match your branch state. Trust the "What this window was doing" section and the recent-commits / modified-files lists below for THIS branch's truth.
+- **AGENTS.md is binding for your edits.** Read the chain from root down to every path you plan to touch. If a parent AGENTS.md indexes a child you intend to edit under, follow the index. The closest doc wins for local rules; no child may weaken a parent rule or the global CLAUDE.md.
+- **Convergence priority.** If orientation files and the qClose hand-off section conflict (e.g. TODO.md hints at different priorities than the "What this window was doing" synthesis), THIS window's hand-off wins — that's the explicit reason a session-handoff exists.
+
+If a listed file doesn't exist, note it once mentally and move on. Do NOT create them; that's not part of resume.
 
 ## What this window was doing
 
@@ -255,23 +313,29 @@ qClose done.
 - learn:  wrote hermes-auto-<slug>  (or "no skill captured")
 - index:  appended ~/.claude/.qclose_index.jsonl (session <sessid6>)
 
+**Open Claude Code in this exact directory first:**
+**<expected_cwd>**
+
 ====================================================================
 COPY & PASTE IN THE NEW SESSION:
 ====================================================================
 
-**Open Claude Code in this exact directory first:**
-**<expected_cwd>**
 
-**Then paste this prompt:**
+*****************************************************************
+Read and identify with this file: <absolute resume_path>
+*****************************************************************
 
-**Read and identify with this file: <absolute resume_path>**
 
-(If the new window is opened in any other directory, the resume
-file's STEP 0 will catch it and tell you to stop. Do not improvise.)
 ====================================================================
 ```
 
-The double-bold + box formatting is intentional. The user wants this block visually unmissable, not buried in a bullet list. Render it with `**...**` markdown for bold, and use ASCII equals signs (`=`) for the box border (per CLAUDE.md "no decorative unicode" rule).
+Format rules — get them exactly right, the user inspects this block:
+
+- The "Open Claude Code in this exact directory first: <path>" line is **META-instruction** and lives OUTSIDE the box. It tells the user where to open Claude — it's NOT part of what gets pasted.
+- The outer ASCII box (`===` borders) brackets the whole paste section.
+- Inside that, the actual paste-line `Read and identify with this file: <absolute resume_path>` is wrapped between two `*****` banner rows so it stands out visually as the literal copy-target. Two blank lines sit above the top `*****` row and two below the bottom `*****` row.
+- Do NOT add an intermediate "Then paste this prompt:" line — it's redundant. The box header "COPY & PASTE IN THE NEW SESSION:" is the only label needed.
+- Use `**...**` markdown bold on the meta-instruction lines (path + label) so they stand out. Use plain ASCII `=` and `*` for borders (per CLAUDE.md "no decorative unicode" rule).
 
 ## Edge-case matrix
 

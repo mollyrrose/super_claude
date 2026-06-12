@@ -49,6 +49,24 @@ hermes-agent.bak.*/
 /ai_video/start_comfyui.bat
 /ai_video/upstream_state.json
 /ai_video/.scratch/
+# Background-launcher state (start_comfyui_bg.ps1)
+/ai_video/.comfyui.pid
+/ai_video/.comfyui.log
+/ai_video/.comfyui.log.old
+/ai_video/.comfyui.err
+/ai_video/.comfyui.err.old
+# Bundled ffmpeg binaries (downloaded by setup_ai_video.ps1, ~80 MB)
+/ai_video/ffmpeg/
+# Belt-and-suspenders: ANY safetensors (or other model weights) anywhere
+# under /ai_video/, even if a user drops one outside the already-ignored
+# /ai_video/comfyui/ subtree. Individual files are 7-30 GB; never commit.
+/ai_video/**/*.safetensors
+/ai_video/**/*.ckpt
+/ai_video/**/*.gguf
+/ai_video/**/*.bin
+/ai_video/**/*.pth
+/ai_video/**/*.pt
+/ai_video/**/*.onnx
 *.crdownload
 *.openai_api_key
 
