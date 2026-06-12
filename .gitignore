@@ -40,6 +40,16 @@ hermes-agent.bak.*/
 /.scratch/
 /tmp/
 
+# ---------- AI video pipeline (heavy installs, per-machine) ----------
+# ComfyUI clone + venv + model weights are too large + machine-specific.
+# Only setup_ai_video.ps1, workflows/, MCP servers, and docs are tracked.
+/ai_video/comfyui/
+/ai_video/models/
+/ai_video/start_comfyui.bat
+/ai_video/upstream_state.json
+/ai_video/.scratch/
+*.openai_api_key
+
 # ---------- per-project Claude Code harness state ----------
 /.claude/
 

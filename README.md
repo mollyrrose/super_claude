@@ -146,6 +146,34 @@ Backwards-compat: `critic_provider: claude` and `critic_provider: openai` keep v
 
 See [`hermes-agent/claude_skills_backup/qPlan/SKILL.md`](hermes-agent/claude_skills_backup/qPlan/SKILL.md) for the full configuration block and the lens roster.
 
+### 10. AI video pipeline (`comfyui-local` + `sora-cloud` MCP servers)
+
+Hybrid AI-video stack drivable from Claude Code via MCP:
+
+- **Local** ComfyUI + LTX-Video 0.9.8 distilled fp8 (2B). Free, runs on consumer GPUs (8 GB VRAM minimum), ~5-15 min per 5 s 480p clip on an RTX 4070 Laptop.
+- **Cloud** OpenAI Sora 2 / Sora 2 Pro. $0.10-$0.30 per second, ~1-3 min per clip, much higher quality.
+
+Both are exposed as MCP servers Claude Code can call: `comfyui-local` (local) and `sora-cloud` (cloud).
+
+Auto-installer (Tier C-focused, idempotent — runs hardware detection, ComfyUI clone+venv+PyTorch cu126, ~23.5 GB model download, launcher generation, MCP runtime deps):
+
+```powershell
+.\scripts\setup_ai_video.ps1
+# or to just check what tier you'd land in:
+.\scripts\setup_ai_video.ps1 -Redetect
+```
+
+Hardware tier table, troubleshooting, what worked / what didn't on first install (e.g. why the ComfyUI Desktop NSIS installer is skipped — it crashes with `System.dll 0xc0000005` on Win11 26200), and the manual post-install steps (claude mcp add, OpenAI API key, workflow JSON save) all live in [`docs/AI_VIDEO_SETUP.md`](docs/AI_VIDEO_SETUP.md).
+
+Source files in this repo:
+
+- [`scripts/setup_ai_video.ps1`](scripts/setup_ai_video.ps1) — the installer
+- [`hermes-agent/claude_code_integration/mcp_servers/comfyui_mcp.py`](hermes-agent/claude_code_integration/mcp_servers/comfyui_mcp.py) — local MCP, thin wrapper around ComfyUI's HTTP API
+- [`hermes-agent/claude_code_integration/mcp_servers/sora_mcp.py`](hermes-agent/claude_code_integration/mcp_servers/sora_mcp.py) — cloud MCP, thin wrapper around `openai.videos`
+- [`docs/AI_VIDEO_SETUP.md`](docs/AI_VIDEO_SETUP.md) — guide + history
+
+Per-machine artifacts (ComfyUI clone, venv, models, generated `.bat`, API key file) are all gitignored — nothing under `ai_video/comfyui/`, `ai_video/models/`, or `*.openai_api_key` is committed.
+
 ---
 
 ## Install
@@ -172,12 +200,17 @@ cd D:\projects\super_claude
 
 # 2. Install the skill bundle and wire the hooks
 python hermes-agent\claude_code_integration\install_into_claude_code.py
+
+# 3. (Optional) Set up the AI video pipeline (~30 GB, RTX-class GPU recommended)
+.\scripts\setup_ai_video.ps1
 ```
 
-The installer:
+The skill installer (step 2):
 - copies `claude_skills_backup/*` skills into `~/.claude/skills/hermes-*/`
 - wires the `Stop`, `PreCompact`, `UserPromptSubmit`, `PostToolUse`, `SessionEnd` hooks into `~/.claude/settings.json`
 - creates the empty queue files (`~/.claude/.hermes_curator_queue.json`, `~/.claude/.hermes_qplan_curator_queue.json`, `~/.claude/.qrev_auto_state.json`)
+
+The AI video installer (step 3, optional) is documented in [`docs/AI_VIDEO_SETUP.md`](docs/AI_VIDEO_SETUP.md). It auto-detects your GPU tier and only fully automates Tier C (8-11 GB VRAM) today; other tiers print guidance.
 
 For manual wiring see the architecture writeup at [`hermes-agent/INTEGRATION_CLAUDE_CODE.md`](hermes-agent/INTEGRATION_CLAUDE_CODE.md).
 
