@@ -54,6 +54,7 @@ When in doubt: if removing the character wouldn't reduce the meaning a plain-tex
 
 - `PostToolUse(Write|Edit)`: `semgrep_postedit_hook.py` then `qrev_edit_counter.py`
 - `UserPromptSubmit`: `curator_prompt_hook.py`, `smart_router_prompt_hook.py`, `context_budget_gate.py`, `qrev_auto_inject.py`
+  - `smart_router_prompt_hook.py` (rules in `smart_router_rules.py`) emits both a skill suggestion and a `[model-router hint]` for subagent model tiering (haiku/sonnet/opus). The tiering policy Claude follows lives in the global `~/.claude/CLAUDE.md` under "Subagent model routing (tiering)". `context_budget_gate.py` is now tracked in this repo at `scripts/` and re-detects the active model's window every prompt (Opus -> 1M, else 200K), so a `/model` switch re-budgets context.
 - `Stop`: `curator_stop_hook.py`
 - `PreCompact`: `curator_precompact_hook.py`
 - `SessionEnd`: `rev_learn_sessionend.py` (async)

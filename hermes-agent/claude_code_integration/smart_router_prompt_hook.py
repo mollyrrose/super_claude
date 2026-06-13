@@ -25,9 +25,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from smart_router_rules import classify_prompt, format_suggestion  # noqa: E402
+from smart_router_rules import (  # noqa: E402
+    classify_prompt,
+    format_suggestion,
+    format_model_tier,
+    recommend_model_tier,
+)
 
-MAX_INJECTED_CHARS = 400
+MAX_INJECTED_CHARS = 800
 
 EVAL_LOG_PATH = (
     Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude")))
@@ -49,7 +54,7 @@ def _slugify_project(cwd: str) -> str:
     return out
 
 
-def _log_eval_row(prompt_text: str, suggestion, payload: dict) -> None:
+def _log_eval_row(prompt_text: str, suggestion, payload: dict, tier=None) -> None:
     """Append one hashed eval row to ~/.claude/.smart_router_eval.jsonl.
 
     Privacy: stores sha256(prompt)[:16] and a word count; never the body.
@@ -65,6 +70,7 @@ def _log_eval_row(prompt_text: str, suggestion, payload: dict) -> None:
         "prompt_hash": hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()[:16],
         "prompt_len_words": len(prompt_text.split()),
         "suggested_skill_or_null": suggestion.skill if suggestion is not None else None,
+        "suggested_model_or_null": tier.model if tier is not None else None,
         "invoked_skill_or_null": None,
     }
     EVAL_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -117,14 +123,25 @@ def main() -> int:
         return 0
 
     try:
-        _log_eval_row(prompt_text, suggestion, payload_obj)
+        tier = recommend_model_tier(prompt_text)
+    except Exception:
+        tier = None
+
+    try:
+        _log_eval_row(prompt_text, suggestion, payload_obj, tier)
     except Exception:
         pass  # logger must never block the prompt
 
-    if suggestion is None:
+    hints: list[str] = []
+    if suggestion is not None:
+        hints.append(format_suggestion(suggestion))
+    if tier is not None:
+        hints.append(format_model_tier(tier))
+
+    if not hints:
         return 0
 
-    text = format_suggestion(suggestion)
+    text = "\n".join(hints)
     if len(text) > MAX_INJECTED_CHARS:
         text = text[: MAX_INJECTED_CHARS - 3] + "..."
 

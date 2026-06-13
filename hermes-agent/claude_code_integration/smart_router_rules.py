@@ -218,3 +218,120 @@ def format_suggestion(suggestion: Suggestion) -> str:
         f"chose a different approach or the request is smaller than the hint suggests. "
         f"This is a suggestion, not enforcement — the user can override."
     )
+
+
+# ── Model-tier routing ─────────────────────────────────────────────────────
+#
+# Claude Code cannot switch the MAIN session's model from a hook (hard
+# architectural limit), and a /model switch is manual. The conversation
+# transcript is model-agnostic, so the supported way to run a given phase on a
+# different-strength model is to DELEGATE it to a subagent that carries its own
+# `model` (Agent/Task `model: opus|sonnet|haiku|fable`). This router classifies
+# the prompt's phase and recommends the subagent model to use when delegating;
+# the main session keeps the full context regardless of what the subagent runs.
+#
+# Capability ladder (ascending): haiku < sonnet < opus. The recommendation bakes
+# in a one-tier safety margin over the bare minimum for planning and
+# implementation work, and ties break upward ("one version higher than
+# needed"), capped at opus. Mechanical work stays on haiku. Fable is a separate
+# fast line and is intentionally not placed on this ladder.
+
+
+@dataclass(frozen=True)
+class ModelTier:
+    model: str   # subagent model alias: "opus" | "sonnet" | "haiku"
+    phase: str   # human-readable phase label
+    why: str     # one-line rationale surfaced to the model
+
+
+# High tier (opus): planning, design, architecture, deep reasoning, audit,
+# research, hard root-cause debugging, security review.
+_TIER_HIGH_PATTERNS = [
+    r"\b(architect|architecture|system design|design the)\b",
+    r"\bplan (?:this|out|the|a)\b",
+    r"\bhow should (?:i|we)\b",
+    r"\bbest (?:approach|design|architecture|way)\b",
+    r"\b(trade[-\s]?offs?|alternatives?)\b",
+    r"\broot[-\s]?cause\b",
+    r"\b(regression|regressed)\b",
+    r"\baudit\b",
+    r"\b(security|threat)[-\s]?(?:review|model|audit|analysis)\b",
+    r"\b(research|deep[-\s]?dive)\b",
+    r"\bhelp me understand\b",
+    # Hungarian
+    r"\b(tervezd|tervezz|hogyan érdemes|mi a legjobb|megéri)\b",
+    r"\bgyökér ?ok\b",
+    r"\bbiztonsági (?:átvizsgálás|audit|elemzés)\b",
+    r"\b(kutass|mélyebben|értsd meg|tervezés)\b",
+]
+
+# Mechanical tier (haiku): low-effort, near-deterministic edits and lookups.
+_TIER_MECH_PATTERNS = [
+    r"\b(rename|reformat|re[-\s]?indent)\b",
+    r"\bformat the\b",
+    r"\bfix the (?:indentation|formatting|whitespace|spelling)\b",
+    r"\b(typo|misspelling)\b",
+    r"\b(list|show me)\b.{0,15}\b(files|functions|imports|occurrences|todos|directories|folders)\b",
+    r"\b(grep|search for|find (?:all )?occurrences)\b",
+    r"\bbump (?:the )?version\b",
+    r"\bwhat files?\b",
+    # Hungarian
+    r"\b(nevezd át|formázd|elgépel|listázd|keresd meg|melyik fájl)\b",
+]
+
+# Implementation tier (sonnet): standard coding, refactors, tests, bug fixes.
+_TIER_IMPL_PATTERNS = [
+    r"\b(implement|build|add|wire|integrate|write|create)\b.{0,60}\b(feature|component|module|endpoint|function|method|handler|test|tests|class|migration|script|integration|service|pipeline|hook|route|model)\b",
+    r"\brefactor (?:the|this|that|it)\b",
+    r"\b(fix|patch) (?:the |this )?(?:bug|issue|function|method|test)\b",
+    r"\bwrite (?:the )?(?:unit |integration )?tests?\b",
+    # Hungarian
+    r"\b(implementáld|csináld meg|írd meg|refaktoráld|kösd be|javítsd)\b",
+]
+
+
+def recommend_model_tier(text: str) -> Optional[ModelTier]:
+    """Recommend a subagent model for the prompt's phase, or None when unsure.
+
+    Same conservative bar as classify_prompt: no hint for slash commands, very
+    short prompts, or anything that doesn't clearly match a phase. High tier is
+    checked first so "security audit of the new module" routes to opus, not the
+    implementation tier.
+    """
+    if not text or not text.strip():
+        return None
+    raw = text.strip()
+    if _has_slash_command(raw):
+        return None
+    if _word_count(raw) < 4:
+        return None
+    lc = raw.lower()
+    if _matches_any(lc, _TIER_HIGH_PATTERNS):
+        return ModelTier(
+            "opus",
+            "planning / design / deep-reasoning",
+            "hard reasoning -> top tier (one step above the bare minimum, capped at opus)",
+        )
+    if _matches_any(lc, _TIER_MECH_PATTERNS):
+        return ModelTier(
+            "haiku",
+            "mechanical / trivial",
+            "near-deterministic low-effort work -> the cheapest tier is enough",
+        )
+    if _matches_any(lc, _TIER_IMPL_PATTERNS):
+        return ModelTier(
+            "sonnet",
+            "implementation / refactor",
+            "standard coding -> mid tier (one step above the bare minimum)",
+        )
+    return None
+
+
+def format_model_tier(tier: ModelTier) -> str:
+    """Format a ModelTier for injection as UserPromptSubmit additionalContext."""
+    return (
+        f"[model-router hint] This looks like {tier.phase} work. "
+        f"If you delegate it, prefer a `{tier.model}` subagent (Agent/Task model: {tier.model}); "
+        f"{tier.why}. The main session keeps full context regardless of the subagent's model. "
+        f"Suggestion only -- skip it for quick conversational turns or if the user chose otherwise."
+    )
