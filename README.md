@@ -174,6 +174,18 @@ Source files in this repo:
 
 Per-machine artifacts (ComfyUI clone, venv, models, generated `.bat`, API key file) are all gitignored — nothing under `ai_video/comfyui/`, `ai_video/models/`, or `*.openai_api_key` is committed.
 
+### 11. Learning data layer (prerequisite for a future learned predictor)
+
+Pure logging, no ML, no extra dependencies, append-only, reversible. The point (per the FabricPC PCN evaluation) is that the unlock for any learned component is *data first, algorithm later* — so three deterministic streams accumulate `X -> Y`-style records that a future predictor (PCN, linear, gradient-boosting, whatever) can be evaluated against honestly:
+
+| Stream | Written by | File | Captures |
+|---|---|---|---|
+| Router | `smart_router_prompt_hook.py` (`_log_eval_row`) | `~/.claude/.smart_router_eval.jsonl` | prompt features -> rule suggestion vs. actually-invoked skill |
+| qRev verdict | `qrev_mark_done.py` (`append_verdict_log`) | `~/.claude/.qrev_verdict_log.jsonl` | review kind -> P0/P1/P2/P3 + fix/skip counts |
+| Decision | `decision_log_cli.py` (`append_decision_log`) | `~/.claude/.decision_log.jsonl` | decision + rationale; `revisit_if` + later `outcome` (`held`/`reversed`) is the natural quality label |
+
+The decision stream is fed by the global `CLAUDE.md` "Decision log" convention: when Claude records a non-trivial decision it also pipes the fields as JSON on stdin to `decision_log_cli.py`. Required fields are just `title` + `decision`; `outcome` defaults to `open`. The router and verdict streams already existed; the decision stream (`decision_log_cli.py` + `test_decision_log_cli.py`) completes the trio. None of these train anything today — they only collect, so the option stays open without committing to a model.
+
 ---
 
 ## Install
