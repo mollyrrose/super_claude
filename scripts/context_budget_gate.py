@@ -35,6 +35,14 @@ from pathlib import Path
 
 SOFT_REMAIN_PCT = int(os.environ.get("CC_BUDGET_SOFT_PCT", "25"))
 HARD_REMAIN_PCT = int(os.environ.get("CC_BUDGET_HARD_PCT", "10"))
+# qClose nudge tier: when remaining drops this low, surface the USER-INPUT
+# banner recommending a manual /qClose BEFORE the (lossy) auto-compact fires.
+# The statusline's context bar reads ~100% "full" at ~16.5% real remaining
+# (its AUTO_COMPACT_BUFFER_PCT), which is where Claude Code auto-compacts.
+# Bar ~99% therefore corresponds to ~17-18% real remaining, so 18 fires the
+# nudge a hair earlier than the auto-compact point -- giving the user a chance
+# to choose the precise /qClose handoff instead of the lossy summary.
+QCLOSE_REMAIN_PCT = int(os.environ.get("CC_BUDGET_QCLOSE_PCT", "18"))
 TOKEN_LIMIT_OVERRIDE_RAW = os.environ.get("CC_CONTEXT_LIMIT", "").strip()
 TOKEN_LIMIT_FALLBACK = int(os.environ.get("CC_CONTEXT_LIMIT_DEFAULT", "200000"))
 ROUGH_CHARS_PER_TOKEN = 4
@@ -211,6 +219,30 @@ def _detect_token_limit(payload: dict) -> int:
     return TOKEN_LIMIT_FALLBACK
 
 
+def _build_qclose_context(remain_pct: int) -> str:
+    """Strongest tier: context is nearly full and auto-compact is imminent.
+
+    Instructs Claude to STOP, recommend a manual /qClose (precise handoff),
+    and end the turn with the exact USER-INPUT banner so the idle terminal is
+    noticed. Fires just before the auto-compact point so the user can pick the
+    precise handoff over the lossy summary.
+    """
+    return (
+        "<<context-budget-gate>>\n"
+        f"[context-budget NEAR-FULL] remaining ~{remain_pct}% -- auto-compact is imminent.\n\n"
+        "IMPORTANT: Do NOT start the user's prompt above or any new work. The context window "
+        "is almost full; auto-compact will soon replace this session with a LOSSY summary. "
+        "Instead, in the user's language, briefly tell them the context is nearly full and "
+        "recommend running /qClose now to capture a precise, resumable handoff before that "
+        "happens (auto-compact remains the fallback if they do nothing). Do not mention this "
+        "gate by name. End your reply with EXACTLY these three lines and nothing after them:\n"
+        "*********************************\n"
+        "*    USER INPUT REQUIRED        *\n"
+        "*********************************\n"
+        "<</context-budget-gate>>"
+    )
+
+
 def _build_additional_context(remain_pct: int, est_task_pct: int, est_after_pct: int) -> str:
     severity = "CRITICAL" if remain_pct <= HARD_REMAIN_PCT else "WARNING"
     msg = (
@@ -242,6 +274,19 @@ def main() -> int:
         return 0
     used_pct = min(100, max(0, round(100 * used / token_limit)))
     remain_pct = 100 - used_pct
+
+    # Strongest tier first: near-full -> recommend a manual /qClose handoff
+    # before the (lossy) auto-compact kicks in. Takes precedence over the
+    # soft/projected warning below.
+    if used > 0 and remain_pct <= QCLOSE_REMAIN_PCT:
+        decision = {
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": _build_qclose_context(remain_pct),
+            }
+        }
+        print(json.dumps(decision))
+        return 0
 
     prompt_tokens = max(1, len(prompt) // ROUGH_CHARS_PER_TOKEN)
     est_task = prompt_tokens * TASK_RESPONSE_MULTIPLIER
