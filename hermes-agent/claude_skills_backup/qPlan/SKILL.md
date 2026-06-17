@@ -1,6 +1,6 @@
 ---
 name: qPlan
-description: Run a guaranteed-terminating author↔critic iteration loop to deepen a plan (and optionally code). Each suggestion is tracked in a semantic ledger, each accepted change classified by materiality tier, and the loop stops when real progress ends — not when refinement ends. Invoked via /qPlan (canonical) OR any case variant — /qplan, /Qplan, /QPlan, /QPLAN all map to this same skill (case-insensitive). If the user types any of these, treat as a /qPlan invocation and proceed with this skill's state machine.
+description: Run a guaranteed-terminating author↔critic iteration loop to deepen a plan (and optionally code). Each suggestion is tracked in a semantic ledger, each accepted change classified by materiality tier, and the loop stops when real progress ends — not when refinement ends. Invoked via /qPlan (canonical) OR any case variant — /qplan, /Qplan, /QPlan, /QPLAN all map to this same skill (case-insensitive). If the user types any of these, treat as a /qPlan invocation and proceed with this skill's state machine. SPECIAL MODE: /qPlan auto <goal> switches to an Arbor-fused AUTONOMOUS optimization loop (executes code + evals, not plan-only) — see references/auto-mode.md.
 ---
 
 # qPlan — Author↔Critic Iteration Loop
@@ -36,6 +36,29 @@ Skip for:
     - Ha az args execution-szerű ("implement", "csináld", "ok", "ok tovább", "tovább", "phase 0→1→2"), stop + 1 kérdés, nem reinterpret
     - MUST: egy `/qPlan` hívás = egy plan-fájl bemenet = egy iteráció run = egy workdir. Ha az args több plan-fájlra hivatkozik, vagy egy run convergencia után egy *új* brainstorming task is megjelenik a payload-ban, **állj meg és kérdezz** (mint Round 0-ban A/B/C disambiguation-nel) — ne chain-elj automatikusan egy második qPlan futtatást ugyanabban a válaszban. Egy futtatás convergencia után = STOP + handoff a user-nek; a user dönti el indít-e új `/qPlan`-t.
 
+
+## Auto mode (`/qPlan auto`) — Arbor-fused autonomous optimization
+
+`/qPlan auto <goal>` is a SEPARATE mode with its own contract. The default
+`/qPlan` (everything else in this file) is **plan-only** and must NOT execute or
+modify the codebase. Auto mode is the **explicit exception**: it runs an
+autonomous, metric-driven optimization loop that DOES edit code, run evals,
+create worktrees/branches, and merge verified winners — powered by the vendored
+Arbor skill suite, kept inside our conventions.
+
+Routing:
+- If the user's invocation is `/qPlan auto ...` (or `auto` is the first arg, any
+  case), do NOT run the author↔critic state machine below. Instead read
+  `references/auto-mode.md` in full, then drive the run per that file (it loads
+  our house rules and invokes `arbor-research-agent`).
+- Everything else (`/qPlan <plan>` with no `auto`) runs the plan-only state
+  machine in this file, and the MUST NOT-execute rule still holds.
+
+Auto mode fits only when there is a measurable objective and tolerance for many
+autonomous iterations. For interactive design/architecture deliberation, use the
+default author↔critic panel below, not auto mode. Full details, the model-tier
+mapping, GLM caveat, held-out discipline, decision-log hooks, safety gates, and
+closeout all live in `references/auto-mode.md` — read it at invocation time.
 
 ## Configuration
 
