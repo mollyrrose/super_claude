@@ -1,6 +1,6 @@
 ---
 name: qPlan
-description: Run a guaranteed-terminating author↔critic iteration loop to deepen a plan (and optionally code). Each suggestion is tracked in a semantic ledger, each accepted change classified by materiality tier, and the loop stops when real progress ends — not when refinement ends. Invoked via /qPlan (canonical) OR any case variant — /qplan, /Qplan, /QPlan, /QPLAN all map to this same skill (case-insensitive). If the user types any of these, treat as a /qPlan invocation and proceed with this skill's state machine. SPECIAL MODE: /qPlan auto <goal> switches to an Arbor-fused AUTONOMOUS optimization loop (executes code + evals, not plan-only) — see references/auto-mode.md.
+description: Run a guaranteed-terminating author↔critic iteration loop to deepen a plan. qPlan is the BRAIN — it plans and decides (including the OpenAI cross-model panel) and is strictly PLAN-ONLY; it never executes or modifies the codebase. Each suggestion is tracked in a semantic ledger, each accepted change classified by materiality tier, and the loop stops when real progress ends — not when refinement ends. To EXECUTE a plan (autonomously, with or without variants), use /qGoal, which calls qPlan for its decisions. Invoked via /qPlan (canonical) OR any case variant — /qplan, /Qplan, /QPlan, /QPLAN all map to this same skill (case-insensitive). If the user types any of these, treat as a /qPlan invocation and proceed with this skill's state machine.
 ---
 
 # qPlan — Author↔Critic Iteration Loop
@@ -39,33 +39,26 @@ pass on a draft use `ponytail-review`. Net: `improve` finds *what* is worth doin
 
 ## MUST/MUST NOT:
     - MUST: bemeneti tervet kritikusi iterációba veszi, akkor is ha "implementálni készen" tűnik
-    - MUST NOT: tervet execute-ol, fájlokat módosít a kódbázisban, commit-ol — ezek /qDo vagy hasonló feladata
-    - Ha az args execution-szerű ("implement", "csináld", "ok", "ok tovább", "tovább", "phase 0→1→2"), stop + 1 kérdés, nem reinterpret
+    - MUST NOT: tervet execute-ol, fájlokat módosít a kódbázisban, commit-ol — a végrehajtás a /qGoal feladata (az hívja vissza a qPlan-t a döntésekhez). qPlan SOHA nem hajt végre.
+    - Ha az args execution-szerű ("implement", "csináld", "ok", "ok tovább", "tovább", "phase 0→1→2"), stop + 1 kérdés, nem reinterpret — vagy javasold a /qGoal-t, ha a user tényleg végrehajtást kér
     - MUST: egy `/qPlan` hívás = egy plan-fájl bemenet = egy iteráció run = egy workdir. Ha az args több plan-fájlra hivatkozik, vagy egy run convergencia után egy *új* brainstorming task is megjelenik a payload-ban, **állj meg és kérdezz** (mint Round 0-ban A/B/C disambiguation-nel) — ne chain-elj automatikusan egy második qPlan futtatást ugyanabban a válaszban. Egy futtatás convergencia után = STOP + handoff a user-nek; a user dönti el indít-e új `/qPlan`-t.
 
 
-## Auto mode (`/qPlan auto`) — Arbor-fused autonomous optimization
+## `/qPlan auto` is RETIRED — use `/qGoal`
 
-`/qPlan auto <goal>` is a SEPARATE mode with its own contract. The default
-`/qPlan` (everything else in this file) is **plan-only** and must NOT execute or
-modify the codebase. Auto mode is the **explicit exception**: it runs an
-autonomous, metric-driven optimization loop that DOES edit code, run evals,
-create worktrees/branches, and merge verified winners — powered by the vendored
-Arbor skill suite, kept inside our conventions.
+The old `/qPlan auto` mode (an Arbor-fused autonomous optimization loop that
+executed code) has been **removed**. Execution does not belong in the planner:
+qPlan is the brain, `/qGoal` is the hands. Everything `/qPlan auto` did — running
+code, multiple variants, metric optimization, merging winners — now lives in
+`/qGoal`, which calls qPlan back for its decisions (so qPlan still drives the
+judgment, including OpenAI, it just no longer executes).
 
-Routing:
-- If the user's invocation is `/qPlan auto ...` (or `auto` is the first arg, any
-  case), do NOT run the author↔critic state machine below. Instead read
-  `references/auto-mode.md` in full, then drive the run per that file (it loads
-  our house rules and invokes `arbor-research-agent`).
-- Everything else (`/qPlan <plan>` with no `auto`) runs the plan-only state
-  machine in this file, and the MUST NOT-execute rule still holds.
-
-Auto mode fits only when there is a measurable objective and tolerance for many
-autonomous iterations. For interactive design/architecture deliberation, use the
-default author↔critic panel below, not auto mode. Full details, the model-tier
-mapping, GLM caveat, held-out discipline, decision-log hooks, safety gates, and
-closeout all live in `references/auto-mode.md` — read it at invocation time.
+Routing: if the user's invocation is `/qPlan auto ...` (or `auto` is the first
+arg, any case), do NOT run the state machine below. Tell the user it moved and
+hand off: "`/qPlan auto` is now `/qGoal` — running `/qGoal <goal>`," then invoke
+`Skill(skill="qGoal", args="<goal>")`. Everything else (`/qPlan <plan>` with no
+`auto`) runs the plan-only state machine in this file, and the MUST NOT-execute
+rule holds.
 
 ## Configuration
 

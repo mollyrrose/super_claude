@@ -41,10 +41,12 @@ hermes-agent.bak.*/
 /tmp/
 # Per-project local task list lives here (exclude/TODO.md) — never committed.
 /exclude/
-# Arbor autonomous-run session state (/qPlan auto) — durable run memory, local only.
+# Arbor autonomous-run session state (qGoal multi-variant backend) — durable run memory, local only.
 /.arbor/
 # qPlan run workdirs — local only.
 /.qplan/
+# qGoal run workdirs (done-contract, state, transcript) — local only.
+/.qgoal/
 
 # ---------- AI video pipeline (heavy installs, per-machine) ----------
 # ComfyUI clone + venv + model weights are too large + machine-specific.

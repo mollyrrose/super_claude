@@ -30,8 +30,11 @@ rules in `CLAUDE.md`. Editing here changes how every Claude Code session behaves
   editing the tracked copy in `scripts/` and copying it to `~/.claude/scripts/`.
 - Smoke tests live next to their scripts, e.g.
   `python scripts/context_budget_gate_smoketest.py` (6 cases).
-- `/qPlan auto <goal>` runs the Arbor optimization loop (backend:
-  `arbor-agent-tools/scripts/arbor_state.py`, stdlib-only).
+- `/qGoal <goal>` is the autonomous executor (the only q-command that touches
+  code): it plans via `/qPlan`, runs a single path or multiple variants as the
+  task warrants (Arbor backend `arbor-agent-tools/scripts/arbor_state.py`,
+  stdlib-only), consults `/qPlan` at decision points, and runs `/qRev` + fixes at
+  the end. `/qPlan` stays plan-only (the brain). `/qPlan auto` is retired -> `/qGoal`.
 - Before installing any external GitHub skill, the `skillspector-gate` rule scans
   it first.
 

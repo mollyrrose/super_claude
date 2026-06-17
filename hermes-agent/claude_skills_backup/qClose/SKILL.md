@@ -86,7 +86,7 @@ Outcomes:
 - **AGENTS.md chain**: walk from `project_root` down to the deepest path Claude touched this session. List every AGENTS.md on the route.
 - **Recently modified files**: `git ls-files -m -o --exclude-standard` for staged/untracked + `git log --since="24 hours ago" --name-only --pretty=format:` for last-day commits. Dedupe, cap at 20.
 - **Worktrees**: `git worktree list`. ALWAYS include in resume prompt (not just when more than one), because the next window needs to see the full layout to know if it's about to open in the wrong place.
-- **Arbor auto-runs (`/qPlan auto`)**: `Glob <project>/.arbor/sessions/*/` for run dirs, and `git branch --list 'arbor/*'` for experiment/trunk branches. If any exist, the session likely ran (or interrupted) an autonomous optimization loop. Record the run dir(s), the latest `REPORT.md` if present, and the `arbor/*` branches for the resume prompt's "Arbor auto-run handoff" section. Do NOT try to commit `.arbor/` — it is gitignored run state by design.
+- **qGoal multi-variant runs**: `Glob <project>/{.qgoal/*/,.arbor/sessions/*/}` for run dirs, and `git branch --list 'qgoal/*'` for experiment/trunk branches. If any exist, the session likely ran (or interrupted) a `/qGoal` multi-variant loop. Record the run dir(s), the latest `REPORT.md` if present, and the `qgoal/*` branches for the resume prompt's "qGoal run handoff" section. Do NOT try to commit `.arbor/` or `.qgoal/` — they are gitignored run state by design.
 - **Background processes**: any background bash jobs (`run_in_background: true`) you started this session that haven't been reported completed. Also any process the user explicitly told you to "watch" or "keep running". If none, omit the section.
 
 ### Step 4 — Generate the resume prompt (UNIQUE FILENAME + STRICT PRE-FLIGHT)
@@ -256,13 +256,13 @@ list the user's most recent 3 prompts verbatim as a fallback.>
 
 - (none) | `<process>` — <what it's doing, where its output lives, expected duration>
 
-## Arbor auto-run handoff (only if a `/qPlan auto` run was active)
+## qGoal run handoff (only if a `/qGoal` multi-variant run was active)
 
-- **Run dir(s)**: `<project>/.arbor/sessions/<run>/` (durable Idea Tree + REPORT.md; gitignored, NOT committed)
-- **Experiment/trunk branches**: `<arbor/<run>/<node> ...>`, trunk `arbor/trunk/<run>`
-- **Last known state**: `<best B_dev score / merged? / cycle N of cap>` from `idea_tree.md` / `REPORT.md`
-- **To resume**: re-invoke `/qPlan auto <original goal>` in this worktree — it re-orients from the on-disk Idea Tree instead of re-running INIT. Do not restart from scratch.
-- (omit this whole section if no `.arbor/sessions/*` and no `arbor/*` branches exist)
+- **Run dir(s)**: `<project>/.qgoal/<run-id>/` and (multi-variant) `<project>/.arbor/sessions/<run>/` (durable Idea Tree + REPORT.md; gitignored, NOT committed)
+- **Experiment/trunk branches**: `<qgoal/<run>/<node> ...>`, trunk `qgoal/trunk/<run>`
+- **Last known state**: `<best score / merged? / cycle N of cap / DONE|BLOCKED>` from `idea_tree.md` / `REPORT.md` / `state.json`
+- **To resume**: re-invoke `/qGoal <original goal>` in this worktree — it re-orients from the on-disk state/Idea Tree instead of restarting. Do not restart from scratch.
+- (omit this whole section if no `.qgoal/*`, `.arbor/sessions/*`, and no `qgoal/*` branches exist)
 
 ## Hermes-learn outcome
 

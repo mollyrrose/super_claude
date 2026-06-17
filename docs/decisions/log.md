@@ -3,6 +3,35 @@
 Newest entry on top. One short ADR-style entry per non-trivial / hard-to-reverse
 decision. See `~/.claude/CLAUDE.md` "Decision log" for the format.
 
+### 2026-06-17 - Retire /qPlan auto; split brain (qPlan) from hands (qGoal)
+Decision: Remove the `/qPlan auto` execution mode and move ALL execution +
+optimization into a new standalone `/qGoal` skill. qPlan becomes strictly
+plan-only again (the "brain", incl. the OpenAI cross-model panel); qGoal is the
+only q-command that touches code (the "hands"). qGoal: plans via qPlan, runs a
+single path OR multiple variants as the task warrants (qPlan decides the variant
+count at planning time — optimization/competing-approach -> multi; deterministic
+build like a webpage -> single), consults qPlan at every decision point (with the
+OpenAI lens while `OPENAI_API_KEY` budget lasts, degrading to qPlan-without-OpenAI
+otherwise, never aborting), then runs `/qRev` and fixes per its P0/P1 findings
+before closeout. The Arbor fusion layer `qPlan/references/auto-mode.md` was deleted
+and its content relocated/adapted to `qGoal/references/engine.md`.
+Why: A planner executing code was a logical wart — qPlan's own MUST NOT-execute
+rule contradicted its `auto` mode. Separating concerns (plan vs do) makes both
+cleaner, lets qGoal reuse qPlan's judgment (and OpenAI) at forks, and removes the
+"needs a metric" limitation: qGoal also handles metric-less tasks with a runnable
+check or a qualitative qPlan/OpenAI verdict.
+Rejected alternatives: (a) add a metric-less mode to `/qPlan auto` and keep
+execution in qPlan — rejected: keeps the planner-executes wart. (b) make qGoal a
+`/qPlan do` sub-mode — rejected: "qPlan" names planning; overloading it further
+muddies it. (c) keep `/qPlan auto` alongside qGoal — rejected: two execution
+entrypoints, redundant; user chose full removal with a redirect.
+Revisit if: a third autonomous mode appears (then factor the shared house rules
+out of `qGoal/references/engine.md` into a common reference); OR the qGoal->qPlan
+decision-call cost proves too high in practice (then narrow what counts as a
+"decision point" / reduce the panel weight for in-loop calls).
+Supersedes the "Adopt Arbor as the engine behind /qPlan auto" entry below (the
+engine stays; only its entrypoint moved from /qPlan auto to /qGoal).
+
 ### 2026-06-17 - skillspector pre-download gate + ponytail/improve/drawio skills
 Decision: Install NVIDIA skillspector as an always-on pre-download security gate
 (scan any GitHub repo/skill before cloning/installing; block on high risk) via a

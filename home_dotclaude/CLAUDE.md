@@ -6,6 +6,86 @@ Global user instructions for Claude Code sessions.
 model: claude-opus-4-7
 thinking: enabled
 
+# GLM (z.ai) — alternate model provider (groundwork; no API key yet)
+
+z.ai serves the GLM models behind an Anthropic-compatible endpoint, so Claude
+Code can run on GLM by pointing its base URL + auth token at z.ai instead of
+Anthropic. This is set up but DORMANT: there is no z.ai API key yet, so nothing
+below is active until a key exists. Source: https://docs.z.ai/devpack/quick-start
+
+How it actually works (read before assuming `/model` alone does it): the
+`/model` picker switches between the models the *current endpoint* exposes; it
+does not change provider. To run on GLM you START Claude Code with the z.ai
+endpoint configured via environment variables. The ready-made launcher does
+this: `D:\projects\super_claude\scripts\claude-glm.ps1` (also copied to
+`~/.claude/scripts\claude-glm.ps1`).
+
+To activate when the key arrives:
+1. Put the key in your shell, never in a tracked file: `$env:ZAI_API_KEY = "<key>"`
+   (or persist it once with `setx ZAI_API_KEY "<key>"`).
+2. Run `claude-glm.ps1` from any project. That session talks to GLM; a normally
+   launched `claude` stays on Anthropic Opus.
+
+Kill switch: just launch `claude` normally (or close the GLM window). Nothing is
+baked into `settings.json`, so the default provider is unchanged. Delete the
+launcher to remove the capability entirely.
+
+## GLM tiering — no conflict with the subagent model routing
+
+The existing "Subagent model routing (tiering)" rule (delegate lighter work to a
+cheaper tier — haiku/sonnet instead of opus) carries over to GLM UNCHANGED. The
+launcher maps each Anthropic tier alias onto a GLM model with Claude Code's
+per-tier env vars:
+
+- `ANTHROPIC_DEFAULT_OPUS_MODEL`   -> GLM flagship  (heavy: plan/design/audit)
+- `ANTHROPIC_DEFAULT_SONNET_MODEL` -> GLM mid        (implementation/tests)
+- `ANTHROPIC_DEFAULT_HAIKU_MODEL`  -> GLM fast/cheap (mechanical)
+- `ANTHROPIC_SMALL_FAST_MODEL`     -> GLM fast/cheap (background tasks)
+
+So the smart-router hint and the "one tier above the minimum" policy still apply
+verbatim — a `haiku` subagent just resolves to a fast GLM model instead of
+Anthropic Haiku, a `sonnet` subagent to a mid GLM model, and so on. There is
+nothing to undo or special-case: the same delegation decisions hold, only the
+concrete model behind each tier changes with the active provider. The exact GLM
+model IDs are placeholders until confirmed against z.ai's model list (the
+quick-start currently names `GLM-5.2`; the cheaper/faster variant is TBD) — fill
+them into the launcher when the key arrives.
+
+CAPABILITY CAVEAT — GLM is not a drop-in equal of the Claude subscription for the
+hardest judgment work. Expect GLM to be weaker than Anthropic Opus at
+architectural design, deep root-cause analysis, security auditing, and other
+high-reasoning planning tasks. So the tier MAPPING above (opus-alias -> GLM
+flagship) does NOT mean GLM-flagship matches Opus on those tasks — it only means
+"the heaviest model GLM offers." Practical rule: GLM is fine for implementation,
+refactors, tests, and mechanical/mid work; for genuine architecture/design or
+hard analysis, prefer running that phase on the Claude (Opus) subscription —
+either do it in a normally launched `claude` window, or treat GLM's architectural
+output as a draft to be reviewed by Claude. When on GLM and a task is clearly
+architecture/design-heavy, say so and suggest switching back to Claude for it
+rather than trusting the GLM result blind.
+
+## Statusline + context budget under GLM
+
+- The statusline context bar reads the remaining-% Claude Code reports for
+  whatever model is active, so it already tracks GLM's window with no change.
+- The context-budget gate (`scripts/context_budget_gate.py`) computes its own
+  budget from transcript token usage, so it detects GLM model ids explicitly and
+  treats them as a 200K window (GLM-4.x). Override with `CC_GLM_CONTEXT_LIMIT`
+  if a GLM model ships a larger window (set it once GLM-5.2's window is known).
+
+## q* commands under GLM
+
+Every `q`-prefixed command (`/qClose`, `/qRem`, `/qRev`, `/qMin`, `/qPlan`,
+`/qDo`, `/qUpd`, `/qContent`, ...) works identically on GLM with NO change. They
+are skills — markdown instructions executed by whatever model is active — and
+their sub-agents run through the Task tool, which inherits the active provider.
+So under the GLM launcher they all run on GLM, and any tier they delegate to
+resolves to a GLM model via the per-tier mapping above. Provider-coupled bits
+behave sensibly: `/qRev`'s default `claude` fleet becomes the active GLM fleet,
+while its optional `openai` / `deepseek` critics keep using their own API keys
+(independent of the main provider). Nothing in any q* skill hardcodes an
+Anthropic model id or endpoint, so there is nothing to special-case.
+
 ## Working style
 
 - Read relevant files before editing. Don't guess at code you haven't seen.
@@ -22,8 +102,19 @@ thinking: enabled
 ## Plain-language questions to the user
 
 When I ASK the user a question — clarifying question, multiple-choice
-prompt, yes/no, approval gate, "which option" — phrase the question so a
-sharp 17-year-old understands it without prior context. That means:
+prompt, yes/no, approval gate, "which option" — I give it in TWO layers,
+every time:
+
+1. **The normal question first.** Technical wording is fine here; ask it
+   the way the work actually frames it.
+2. **A simplified-logic restatement directly underneath it.** Re-explain
+   the SAME question the way I'd explain it to a sharp 17-year-old who has
+   no prior context — the reasoning broken into small steps, plain
+   cause-and-effect ("if you pick A, then X happens; if you pick B, then Y
+   happens"). It re-explains the same choice; it does not change or water
+   down what is being decided.
+
+How to write the simplified-logic layer:
 
 - Plain words, not jargon. If a technical term must appear, explain it
   in the same sentence ("TPM = how many tokens the API lets through per
@@ -32,10 +123,14 @@ sharp 17-year-old understands it without prior context. That means:
 - Concrete examples instead of abstract trade-offs ("Option A finishes
   in 5 minutes but uses 20 GB of disk" rather than "Option A trades
   storage for latency").
-- No slang, no idioms that depend on cultural reference, no winking
-  shorthand. Plain prose only.
-- Match the user's language. If the conversation is Hungarian, the
-  question is Hungarian.
+- **The point is simpler LOGIC, not slang.** No slang, no memes, no idioms
+  that depend on cultural reference, no winking shorthand. Plain, correct
+  reasoning, just unpacked into smaller steps.
+- Match the user's language. If the conversation is Hungarian, both layers
+  are Hungarian.
+- For `AskUserQuestion` tool calls, the simplified-logic layer goes in the
+  assistant text that accompanies the tool call (and/or the option
+  descriptions), since the tool's own fields are short.
 
 This applies only to questions I ASK the user, not to my regular
 explanations, reasoning aloud, or technical responses to a question they
@@ -79,6 +174,55 @@ window sits unused for minutes.
 - Push back on weak assumptions, missing data, or blind spots — don't just agree.
 - Flag risks (security, data loss, irreversible operations) before acting on them.
 
+## Automation & build discipline
+
+Extends "Working style" and "Pushback expected": these govern *when and how
+cautiously to build or automate something*, so effort goes to the simplest thing
+that works instead of clever machinery.
+
+- **Lowest autonomy that works.** Prefer the simplest mechanism that solves it:
+  a plain answer < a one-off script < a single AI step < a sub-agent < a
+  hook/cron/scheduled job. Don't reach for a sub-agent, hook, or scheduled
+  automation when a one-off script or manual step does the job. Prove a manual
+  or semi-automatic version works before building a fully autonomous one.
+- **Eliminate before automating.** First ask whether the work can be removed or
+  simplified out of existence. Automating unnecessary work is wasted effort;
+  finding that a task can be deleted is a win, not a failure.
+- **Deterministic before AI.** Build the rule-based / plain-code path first; add
+  an LLM step only where real judgment is needed. Cheaper, testable, predictable.
+- **Validate each step, not just the end.** Verify each block of a pipeline
+  independently before chaining them. Don't rely on end-to-end-only checks.
+- **Boring is beautiful.** Prefer predictable, well-understood components over
+  clever or novel ones.
+- **Explainability gate.** If you can't explain the workflow to a person in
+  plain steps, it isn't ready to automate. Clarity precedes automation.
+- **Scoped access (Intern Rule).** Use the narrowest credentials/permissions
+  that work; never widen scope for convenience; keep an audit trail for
+  outward-facing actions.
+- **Kill switch.** Anything you automate must be easy to disable or revert —
+  note how to turn it off at the moment you add it.
+
+## Scan GitHub code before downloading it (skillspector gate)
+
+Before cloning, installing, or otherwise trusting ANY external code from GitHub
+(a repo, a Claude Code skill/plugin, a `npx skills add`, a zip), FIRST scan it
+with NVIDIA `skillspector` and act on the result. This is a standing automatic
+behavior, not an on-request one — invoke the `skillspector-gate` skill (see
+`~/.claude/skills/skillspector-gate/SKILL.md`) yourself whenever a download is
+imminent.
+
+- Scanner: `~/.claude/tools/skillspector/.venv/Scripts/skillspector.exe scan
+  "<git-url>" --no-llm --format json -o <report>` (URL form scans WITHOUT adding
+  it to the tree; `--no-llm` is static-only, no API key).
+- Verdict policy: score 0-39 proceed; 40-69 proceed with caution after surfacing
+  top findings; 70-100 BLOCK and ask; any likely-malicious / data-exfiltration /
+  RCE finding BLOCKs regardless of score. On a block, end with the USER-INPUT
+  banner.
+- Exemptions: first-party code (this repo), `skillspector` itself (bootstrap
+  trust root), and anything already logged in `~/.claude/.skillspector_log.jsonl`.
+- Disable: remove this section / stop following it; the scanner at
+  `~/.claude/tools/skillspector` can be deleted with no other effect.
+
 ## Project directory boundaries and dual-window safety
 
 These rules apply to **every** project, regardless of whether a project-level `CLAUDE.md` restates them.
@@ -116,9 +260,80 @@ When you start a Claude session, if the project might have other concurrent wind
 
 Hooks and per-session state files in `~/.claude/` (curator queue, qrev counters, statusline baselines, ecc-session-bridge) are keyed by `session_id`, not by working-tree path. Two concurrent worktrees do not race on those. Each worktree gets its own `.claude/settings.local.json` (fresh permission prompts the first time — that's expected, not a bug).
 
-### Shared TODO files — per-window entries only
+### Per-project TODO and INDEX files
 
-If a project has a shared `TODO.md` / `todo.md` (or any other cross-session task list), multiple Claude Code windows (different branches, different worktrees, different sessions) may all read and write the same file. **Don't** write notes like "NOT this window (other branch, other window)" or "ignore — different session" into shared TODO files. Those notes are meaningless to the other window reading the same file, and they collide.
+Every non-trivial project repo you work in should keep a `TODO.md` and an
+`INDEX.md`. Create them if missing and keep them current as you work.
+(Exception: do NOT create these in `~/.claude` — see "Not for this
+directory" — nor in throwaway/scratch dirs.)
+
+**Where they live.** Every project has an `exclude/` folder at its root, and
+`exclude/` MUST be listed in `.gitignore` — non-negotiable; add the `exclude/`
+line if it is missing. Inside it, an `exclude/SYSTEM_STRATEGIES/` folder holds
+the project's local working state together:
+
+- `exclude/SYSTEM_STRATEGIES/TODO.md` — the canonical task list,
+- `exclude/SYSTEM_STRATEGIES/SYSTEM_STATUS.md` — the system snapshot,
+- `exclude/SYSTEM_STRATEGIES/system_map.drawio` — the architecture diagram.
+
+If the structure is missing, CREATE `exclude/SYSTEM_STRATEGIES/` and move any
+existing task list (a root `TODO.md`, or an older `exclude/TODO.md`) and
+`SYSTEM_STATUS.md` under it — reorganize, do not leave duplicates behind.
+`INDEX.md` lives at the project root and stays tracked; **after any such
+reorganization you MUST rewrite `INDEX.md`** so it states where everything now
+lives (so a fresh session is not pointed at the old paths). And `INDEX.md` is
+not the only referrer — **rewrite EVERY file that names a moved path**, not just
+the index. Grep the whole repo for the old location (the bare name, the old
+relative path, both `/` and `\` separators) and update each hit across
+`STARTUP.md`, `AGENTS.md`, `README.md`, `docs/*`, and any script (`.py`, `.ps1`,
+`.sh`, `.js`) that opens or names the file. Do not leave a "these may still point
+at the old path" flag instead of fixing them — fix them all in the same pass,
+then re-grep to confirm no stale reference remains.
+
+**`TODO.md` — contents rule.** It holds *only*:
+- open / pending tasks, and
+- the minimum notes about already-finished work that a *future* task actually
+  needs (context a later task depends on).
+
+Nothing else belongs in it. In particular, completed work does not stay in the
+TODO just to show it was done — once a task is finished, remove it (keep only a
+short note if a later task genuinely needs it).
+
+**`TODO.md` — maintenance rule.** Prune aggressively: delete anything that is no
+longer useful for future work. The TODO should always read as "what is left to
+do (plus the few done-notes still needed)," never as a growing history log.
+
+**`INDEX.md`.** The project's living orientation map — what the project is, its
+key entry points / structure, and how to run and test it. Keep it current as the
+project changes so a fresh session (or `qRem`) can get oriented fast.
+
+When writing `TODO.md` entries, follow the per-window ownership protocol in the
+next section so concurrent windows don't clobber each other's items.
+
+### Per-project system map (SYSTEM_STATUS + draw.io)
+
+Every non-trivial project also keeps a living system map under
+`exclude/SYSTEM_STRATEGIES/` (inside the gitignored `exclude/` folder):
+
+- `SYSTEM_STATUS.md` — text snapshot of components, what's running/done/not, key
+  data flows, and current blockers.
+- `system_map.drawio` — the same architecture as a draw.io diagram, generated via
+  the `drawio-skill`. The `.drawio` XML is the source of truth (no install needed
+  on Windows); PNG/SVG export is optional (needs the draw.io desktop CLI).
+
+`/qUpd` maintains both and keeps them in agreement. If they are MISSING in a real
+project, qUpd CREATES them on that run and writes how the system is currently
+built — it does not merely flag the absence or ask "if you want". Thereafter it
+refreshes `SYSTEM_STATUS.md` whenever the session changed live component state,
+and redraws the diagram only when the architecture actually changed (new/removed
+component or data flow), not for cosmetic edits. The redraw guard applies to
+updates only — "the session only added tooling" is never a reason to skip the
+first creation. Skip entirely only for a genuinely trivial/empty project. See
+`~/.claude/skills/qUpd/SKILL.md` "SYSTEM_STATUS + draw.io system map".
+
+## Shared TODO files — per-window entries only
+
+If a project has a shared `exclude/TODO.md` / `TODO.md` / `todo.md` (or any other cross-session task list), multiple Claude Code windows (different branches, different worktrees, different sessions) may all read and write the same file. **Don't** write notes like "NOT this window (other branch, other window)" or "ignore — different session" into shared TODO files. Those notes are meaningless to the other window reading the same file, and they collide.
 
 Instead, every TODO entry you create must be scoped to a **window identifier** that is unique to *this specific window*, not just to the branch. Two Claude Code windows can be open on the same branch at the same time, so the branch name alone is not enough — the identifier has to disambiguate window-from-window.
 
@@ -266,30 +481,141 @@ Leave Work Guidance and Verification empty when no concrete standards or checks 
 
 ## No decorative unicode in code or docs
 
-Don't write characters like `->` rendered as arrow (U+2192), check marks (U+2713, U+2714, U+2705, U+2611, U+1F5F8, U+1F5F9), crosses or X marks (U+2715, U+2716, U+2717, U+2718, U+274C, U+274E, U+2612, U+1F5D9, U+1F5F4, U+1F5F5, U+1F5F7), info source (U+2139, U+1F6C8), bullets (U+2022, U+25CF, U+25E6), stars (U+2605, U+2606), pointing triangles (U+25B6, U+25BC) into source files, markdown, comments, commit messages, PR bodies, **shell commands, regex patterns, or any other tool input**. They render inconsistently across terminals, encodings (cp1252 on Windows blows up — see also the project codebase), and search tools, and they add zero meaning over plain ASCII.
+Don't write characters like `->` rendered as arrow (U+2192), check marks (U+2713, U+2714, U+2705, U+2611, U+1F5F8, U+1F5F9), crosses or X marks (U+2715, U+2716, U+2717, U+2718, U+274C, U+274E, U+2612, U+1F5D9, U+1F5F4, U+1F5F5, U+1F5F7), info source (U+2139, U+1F6C8), bullets (U+2022, U+25CF, U+25E6), stars (U+2605, U+2606), pointing triangles (U+25B6, U+25BC) into **executable / runnable code** — string and other literals, identifiers, and any value the program actually runs or prints — or into **shell commands, regex patterns, or any other tool input** that gets parsed or executed. They render inconsistently across terminals, encodings (cp1252 on Windows blows up — see also the project codebase), and search tools, and they add zero meaning over plain ASCII.
+
+**Where the ban applies — code vs. comments.** The ban is absolute for anything that executes or is parsed as input: source-code literals and identifiers, shell commands, regex patterns, and any other tool input. **Code comments and note / documentation prose are exempt** — you MAY use these characters and emoji there (including the "direct hit" / target emoji `🎯`, U+1F3AF), because a comment or note is read by a human and is never executed or printed by the program. The single line to hold: **never in runnable code; allowed in comments and notes.** Commit messages and PR bodies still lean ASCII (they feed `git log` and grep on cp1252 consoles), but that is a preference, not the hard ban.
 
 The same rule applies to **emoji-style** decorative glyphs and any visually similar character. Forbidden emoji (non-exhaustive — the principle covers anything in the same family):
 - check / OK / pipa (all colors, weights, and box variants): check mark (U+2713), heavy check (U+2714), check w/ VS-16 (U+2714 U+FE0F), white heavy check on green (U+2705), ballot box w/ check (U+2611), light check (U+1F5F8), ballot box w/ bold check (U+1F5F9)
 - fail / wrong / X mark (all colors, weights, and box variants): multiplication x (U+2715), heavy multiplication x (U+2716), ballot x (U+2717), heavy ballot x (U+2718), red cross mark (U+274C), green negative squared cross (U+274E), ballot box w/ x (U+2612), cancellation x (U+1F5D9), ballot script x (U+1F5F4), ballot script x w/ box (U+1F5F5), ballot box w/ bold script x (U+1F5F7)
 - info source: information source (U+2139), circled information source (U+1F6C8)
-- warning / alert: warning sign `⚠️` (U+26A0), no entry `⛔` (U+26D4), police light `🚨` (U+1F6A8)
+- warning / alert: warning sign `⚠️` (U+26A0, with or without the U+FE0F variation selector — bans both `⚠` and `⚠️`), no entry `⛔` (U+26D4), police light `🚨` (U+1F6A8)
 - status dots: green/red/yellow/blue circles `🟢🔴🟡🔵` (U+1F7E2..U+1F7E6), large circles `⚫⚪🟠🟣🟤` family
 - thumbs / hands: thumbs up/down `👍👎` (U+1F44D/U+1F44E), pointing hands `👉👈👆👇`
-- decoration: sparkles `✨` (U+2728), star `⭐🌟` (U+2B50/U+1F31F), fire `🔥` (U+1F525), rocket `🚀` (U+1F680), party `🎉🎊`, hundred `💯`
+- decoration: sparkles `✨` (U+2728), star `⭐🌟` (U+2B50/U+1F31F), fire `🔥` (U+1F525), rocket `🚀` (U+1F680), party `🎉🎊`, hundred `💯`, direct hit / target `🎯` (U+1F3AF)
 - notes / ideas: light bulb `💡` (U+1F4A1), memo `📝` (U+1F4DD), pin `📌` (U+1F4CC), books `📚`, clipboard `📋`
 
-When in doubt about a character you're about to emit: if it's outside the Basic Latin / Latin-1 range and isn't already on the **functional** allowlist below, treat it as decoration and drop it.
+When in doubt about a character you're about to emit **into code or tool input**: if it's outside the Basic Latin / Latin-1 range and isn't already on the **functional** allowlist below, treat it as decoration and drop it. (Comments and notes are exempt — see "Where the ban applies" above.)
 
 Use ASCII equivalents:
 - arrow: `->`
 - pass / done: `[ok]` or `(ok)` or just say "pass"
 - fail / wrong: `[fail]` or `(bad)`
+- warn / alert: `[warn]` or `(warn)`
 - bullets: `-` or `*`
 - info: `[i]` or `note:`
 
 This rule does NOT apply to **functional** unicode in user-facing display — e.g. the statusline progress-bar glyphs (`U+2588 U+2591`) and the pace arrows (`U+25B2 U+25BC`) are deliberate UI, not decoration, and stay. The em-dash (`—`, U+2014) is fine in prose because plain `--` is ambiguous with CLI flag syntax. The question is "does it convey something a plain-text reader needs?" — if yes, keep; if it's just visual flair, use ASCII.
 
 Even when filtering output that contains these glyphs (e.g. `grep` over a `node:test` reporter stream that emits check variants `✓ ✔ ✅ ☑ 🗸 🗹` (U+2713 / U+2714 / U+2705 / U+2611 / U+1F5F8 / U+1F5F9), X variants `✕ ✖ ✗ ✘ ❌ ❎ ☒ 🗙 🗴 🗵 🗷` (U+2715 / U+2716 / U+2717 / U+2718 / U+274C / U+274E / U+2612 / U+1F5D9 / U+1F5F4 / U+1F5F5 / U+1F5F7), or info-source variants `ℹ 🛈` (U+2139 / U+1F6C8)), write the filter using ASCII keywords like `fail|error|pass` — **never quote the glyph itself** in a pattern. The reporter also emits ASCII status words alongside the glyphs (`fail 0`, `pass 12`); match those.
+
+## Subagent model routing (tiering)
+
+Claude Code cannot switch the main session's model from a hook (hard limit), and
+a `/model` switch is manual. The conversation transcript is model-agnostic — any
+model re-reads the whole session — so task-based model selection is done by
+DELEGATING a phase to a subagent that carries its own `model`, NOT by switching
+the main model. The main session keeps full context regardless of what tier a
+subagent runs at.
+
+The `smart_router_prompt_hook.py` UserPromptSubmit hook auto-detects each
+prompt's phase and injects a `[model-router hint]` naming the tier to use when
+you delegate. Follow it:
+
+- Capability ladder (ascending): haiku < sonnet < opus. Fable is a separate fast
+  line, intentionally off-ladder.
+- Plan / design / architecture / audit / research / hard root-cause / security
+  -> `opus` subagent.
+- Implementation / refactor / tests / bug fix -> `sonnet` subagent.
+- Mechanical (rename, format, list, grep, typo, version bump) -> `haiku` subagent.
+- Policy: pick one tier above the bare minimum and break ties upward ("one
+  version higher than needed"), capped at opus.
+
+Apply it only when the work is substantial enough to delegate — quick
+conversational turns and tiny edits stay on the main model. The hint is
+advisory; the user can override. Set a subagent's model via the Agent/Task
+`model` field (`opus|sonnet|haiku|fable`) or the agent definition's frontmatter.
+
+When the active provider is GLM (z.ai) instead of Anthropic, this same ladder
+and the same hints apply UNCHANGED — the `opus|sonnet|haiku` aliases just resolve
+to GLM models per the per-tier env mapping in the "GLM (z.ai)" section above.
+Delegate exactly as you would on Anthropic; only the concrete model behind each
+tier differs.
+
+## Decision log
+
+The file-based memory system stores *facts*; this captures *decisions and their
+rationale* so they aren't silently re-litigated later.
+
+- Record a decision when it is **non-trivial, hard to reverse, or likely to be
+  revisited** — an architecture choice, a dropped approach, a tooling pick, an
+  irreversible operation. Skip trivial/reversible choices (same bar as the
+  memory system's "don't save the obvious").
+- **Where:** for project-scoped decisions, append to a per-project
+  `docs/decisions/log.md` (lightweight ADR, newest entry on top). For
+  cross-project / setup-wide decisions, use the memory system (a `project`-type
+  memory whose body uses the format below; link related memories with
+  `[[name]]`).
+- **Format**, one short entry (ASCII, append-only):
+
+  ```
+  ### YYYY-MM-DD - <decision title>
+  Decision: <what was decided>
+  Why: <the reason>
+  Rejected alternatives: <what was considered and dropped, and why>
+  Revisit if: <the condition that would reopen this>
+  ```
+
+- Keep it cheap — one short entry, not a design doc.
+- **Also append a machine-readable row** to the central decision stream so the
+  data accumulates for a future learned predictor (the FabricPC PCN data layer,
+  alongside `.smart_router_eval.jsonl` and `.qrev_verdict_log.jsonl`). Pipe the
+  same fields as JSON on stdin to the deterministic writer:
+
+  ```
+  "C:\Python313\python.exe" "D:\Projects\super_claude\hermes-agent\claude_code_integration\decision_log_cli.py"
+  ```
+
+  stdin shape: `{"title","decision","why","rejected_alternatives","revisit_if","project","outcome","session_id"}`
+  (only `title` + `decision` are required; `outcome` defaults to `open`). It
+  appends one normalized row to `~/.claude/.decision_log.jsonl`. This is pure
+  logging — no ML runs now; the stream is just collected until there is enough
+  volume to evaluate a predictor. The `revisit_if` field plus a later `outcome`
+  of `held`/`reversed` is the natural future training label (decision quality).
+
+## Periodic self-audit
+
+The question here is "is the setup *built right*," distinct from "what could it
+build."
+
+- On request, or roughly monthly, run `/ecc:harness-audit` (or the
+  `ecc:harness-optimizer` agent) to review hook / skill / config health. That is
+  the self-audit mechanism — don't invent or import another rubric.
+- Quick config-focused checklist to glance at:
+  - hooks running clean (no repeated errors in recent sessions)?
+  - skills actually used vs dead — cross-check `.hermes_skill_state.json`; prune
+    or repair skills with zero uses?
+  - curator + rev-learn actually producing learnings
+    (`.hermes_curator_state.json`, `.rev_learn_state.json`) — or silently idle?
+  - model-router predictions sane (`.smart_router_eval.jsonl`)?
+  - memory + decision-log entries present and current for active projects?
+
+## Skills index and routing
+
+The skills below are always present in this setup and should be invoked via the Skill tool when their trigger fires. Auto-discovery already resolves them, but pinning the routing here guarantees Claude prefers the skill over an ad-hoc response.
+
+### Auto-learning system (hermes-curate + hermes-learn)
+
+- **hermes-curate** (`~/.claude/skills/hermes-curate/SKILL.md`) — drains the curator session queue (`~/.claude/.hermes_curator_queue.json`), extracts truly-recurring skill candidates, writes them to `~/.claude/skills/hermes-auto-<slug>/`. Triggered automatically by the `UserPromptSubmit` hook (`curator_prompt_hook.py`) when the queue threshold (>=3 sessions or >=7 days since last drain) is reached. Trigger: `/hermes-curate` (manual) or auto-injected `additionalContext`. Drain the queue silently before answering the user's actual prompt; never block on curator failures.
+- **hermes-learn** (`~/.claude/skills/hermes-learn/SKILL.md`) — in-session skill capture from the **current** conversation while context is hot. Conservative bar; zero output is a valid outcome. Trigger: `/hermes-learn`.
+
+When the user types `/hermes-curate` or `/hermes-learn`, invoke the Skill tool with the matching `skill:` name before doing anything else.
+
+### Knowledge graph (graphify)
+
+- **graphify** (`~/.claude/skills/graphify/SKILL.md`) — any input (code, docs, papers, images) into a queryable knowledge graph with clustered communities, HTML + JSON + audit report. Source: <https://github.com/safishamsi/graphify> (`v1` branch, MIT). The skill body shells out to the `graphify` CLI; this requires `pip install graphifyy` (note: double-y; Python 3.10+). Trigger: `/graphify` (also `/graphify <path>`, `/graphify add <url>`, `/graphify query <q>`, `/graphify path A B`, `/graphify explain X`, plus `--mode deep`, `--update`, `--watch`, `--wiki`, `--svg`, `--graphml`, `--neo4j`, `--mcp` flags).
+
+When the user types `/graphify`, invoke the Skill tool with `skill: "graphify"` before doing anything else.
 
 ## Not for this directory
 

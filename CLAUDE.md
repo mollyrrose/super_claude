@@ -6,6 +6,23 @@ This file extends the global `~/.claude/CLAUDE.md` with rules specific to this r
 
 `super_claude` is the personal Claude Code setup: hook scripts in `~/.claude/scripts/`, the curator and skill-lifecycle Python modules under `hermes-agent/claude_code_integration/`, and a `claude_skills_backup/` of ~165 skills that get installed into `~/.claude/skills/`. See `README.md` for the full feature catalog.
 
+## Questions to the user — always pair with a plain-logic restatement
+
+This MIRRORS the global "Plain-language questions to the user" rule (now the dual-layer form) and is restated here so it's visible inside the project too. Every time you ask the user anything (clarifying question, A/B/C choice, yes/no, approval gate, "which option"), do not just rewrite the question into plain language — keep the normal (possibly technical) question AND add a simplified-logic restatement directly **underneath** it.
+
+Format for every question:
+1. Ask the normal question first (technical wording is fine here).
+2. Immediately under it, restate the same question with **simplified logic** — the reasoning broken down the way you'd explain it to a sharp 17-year-old who has no prior context: short sentences, one idea per sentence, concrete examples instead of abstract trade-offs, plain cause-and-effect ("if you pick A, then X happens; if you pick B, then Y happens").
+
+Hard constraints:
+- The point is **simplified logic, NOT slang.** Do not use slang, memes, or cultural shorthand. Plain, simple, correct reasoning — just unpacked into smaller steps.
+- The simplified version must ask the SAME question, not a watered-down or different one. It re-explains; it does not change what is being decided.
+- Match the user's language (if the conversation is Hungarian, both layers are Hungarian).
+- For `AskUserQuestion` tool calls, the plain-logic restatement goes in the assistant text that accompanies the tool call (and/or the option descriptions), since the tool's own fields are short.
+- This is additive to the global rules, including the `USER INPUT REQUIRED` banner requirement — still emit that banner when the turn ends waiting on the user.
+
+This applies only to questions I ASK the user. It does NOT mean dumbing down code, reviews, commit messages, or my normal technical explanations.
+
 ## No decorative unicode
 
 This rule mirrors the global rule and is restated here so it's visible inside the project too.

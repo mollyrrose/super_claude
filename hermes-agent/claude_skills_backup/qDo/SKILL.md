@@ -1,5 +1,10 @@
 # qDo — Zero-friction Do (no "Yes/Yes-don't-ask/No" prompts)
 
+> **Not an executor.** Despite the name, `/qDo` does NOT carry a task to
+> completion — it only removes permission-prompt friction (prints a
+> `settings.json` snippet). To autonomously execute a task to a checkable DONE
+> state, use `/qGoal`.
+
 ## When to use
 
 The user wants Claude Code to stop firing "Do you want to proceed?" / "Yes / Yes (and don't ask again) / No" dialogs for routine operations. This skill produces the **one-time settings snippet** they need to paste into `~/.claude/settings.json` (or the project-local `.claude/settings.json`), and tells you how to behave after that.

@@ -42,7 +42,7 @@ Skip when nothing meaningful changed (read-only exploration, single-line tweaks,
 - **Verification evidence** — measurements, test pass/fail, observed runtime behavior.
 - **Open follow-ups** — items the session identified but did not resolve. Move them to TODO.md, do not bury them in INDEX.md prose.
 - **Reversal of prior plans** — if the session abandoned an earlier approach, mark the corresponding TODO entry resolved/obsolete with a one-line reason.
-- **Arbor `/qPlan auto` runs** — if the session ran an autonomous optimization loop, the authoritative "what changed" is NOT just the chat: read `<project>/.arbor/sessions/<run>/REPORT.md` and `.coordinator/idea_tree.md` for the final/merged B_dev+B_test score, the winning branch, and the key insight. Record in INDEX/CHANGELOG: the goal, the metric delta (baseline -> merged, absolute values not deltas), the merged `arbor/trunk/<run>` branch, and any decision-log entry the run wrote. Do not commit `.arbor/` itself (gitignored run state).
+- **qGoal multi-variant runs** — if the session ran a `/qGoal` multi-variant loop (the Arbor backend qGoal uses for optimization tasks), the authoritative "what changed" is NOT just the chat: read `<project>/.arbor/sessions/<run>/REPORT.md` and `.coordinator/idea_tree.md` for the final/merged score, the winning branch, and the key insight. Record in INDEX/CHANGELOG: the goal, the metric delta (baseline -> merged, absolute values not deltas), the merged `qgoal/trunk/<run>` branch, and any decision-log entry the run wrote. Do not commit `.arbor/` or `.qgoal/` itself (gitignored run state).
 
 ## SYSTEM_STATUS + draw.io system map (maintain every run)
 
@@ -77,12 +77,30 @@ Rules:
 4. To (re)generate the diagram, invoke the `drawio-skill` with the component list
    from `SYSTEM_STATUS.md` as input; write the output to
    `exclude/SYSTEM_STRATEGIES/system_map.drawio`.
-5. **Consolidate + gitignore + INDEX.** The canonical task list also lives in this
-   folder: `exclude/SYSTEM_STRATEGIES/TODO.md`. Ensure `exclude/` is in
-   `.gitignore` (mandatory — add it if missing). If an older `TODO.md` /
-   `SYSTEM_STATUS.md` sits at the repo root or directly under `exclude/`, MOVE it
-   here (reorganize, no duplicates) and then **rewrite `INDEX.md`** so it points
-   at the new `exclude/SYSTEM_STRATEGIES/` paths.
+5. **Consolidate + gitignore + rewrite EVERY referrer.** The canonical task list
+   also lives in this folder: `exclude/SYSTEM_STRATEGIES/TODO.md`. Ensure
+   `exclude/` is in `.gitignore` (mandatory — add it if missing). If an older
+   `TODO.md` / `SYSTEM_STATUS.md` / `system_map.drawio` sits at the repo root or
+   directly under `exclude/`, MOVE it here (reorganize, no duplicates).
+
+   **Then chase down every reference to the OLD path and rewrite it — not just
+   `INDEX.md`.** Moving a file silently breaks any doc or script that still names
+   the old location. So after each move:
+   - Grep the whole repo for the old path (try every form a file might use:
+     the bare name `TODO.md`, the old relative path `exclude/TODO.md`, a root
+     `SYSTEM_STATUS.md`, `system_map.drawio`, with both `/` and `\` separators).
+   - Rewrite **every** hit to the new `exclude/SYSTEM_STRATEGIES/...` path —
+     across `INDEX.md`, `STARTUP.md`, `AGENTS.md`, `README.md`, any `docs/*`, and
+     any script (`.py`, `.ps1`, `.sh`, `.js`) that opens or names the file. Do
+     not stop at `INDEX.md`; do not leave a "flag: these files may still point at
+     the old path" note instead of fixing them — fix them all in this run.
+   - Skip only matches that are genuinely about a *different* file (e.g. a
+     `TODO.md` belonging to another subproject, or the literal string inside this
+     very qUpd skill). When unsure whether a hit is the moved file, open it and
+     check before editing.
+   - After rewriting, re-grep for the old path to confirm zero stale references
+     remain (other than intentional ones), and list each rewritten file in the
+     run's output.
 
 ## Commit + push at the end
 
