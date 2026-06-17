@@ -19,7 +19,7 @@ Skip when nothing meaningful changed (read-only exploration, single-line tweaks,
 
 2. **Locate the project's tracking docs.** Look for files in the project root or a docs folder:
    - `INDEX.md` — narrative project overview / session log
-   - `TODO.md` or `tot.md` — work-in-progress and open items
+   - `exclude/TODO.md` (canonical, gitignored per-project location — check first), else root `TODO.md` / `tot.md` — work-in-progress and open items
    - `CHANGELOG.md` — release-style notes
    - `STATUS.md` / `SYSTEM_STATUS.md` (e.g. under `SYSTEM_STRATEGIES/` for AI EA) — current
      "what's running, what's done, what's not" snapshot. **Often goes stale — refresh it
@@ -41,6 +41,7 @@ Skip when nothing meaningful changed (read-only exploration, single-line tweaks,
 - **Verification evidence** — measurements, test pass/fail, observed runtime behavior.
 - **Open follow-ups** — items the session identified but did not resolve. Move them to TODO.md, do not bury them in INDEX.md prose.
 - **Reversal of prior plans** — if the session abandoned an earlier approach, mark the corresponding TODO entry resolved/obsolete with a one-line reason.
+- **Arbor `/qPlan auto` runs** — if the session ran an autonomous optimization loop, the authoritative "what changed" is NOT just the chat: read `<project>/.arbor/sessions/<run>/REPORT.md` and `.coordinator/idea_tree.md` for the final/merged B_dev+B_test score, the winning branch, and the key insight. Record in INDEX/CHANGELOG: the goal, the metric delta (baseline -> merged, absolute values not deltas), the merged `arbor/trunk/<run>` branch, and any decision-log entry the run wrote. Do not commit `.arbor/` itself (gitignored run state).
 
 ## Commit + push at the end
 

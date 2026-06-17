@@ -82,10 +82,11 @@ Outcomes:
 ### Step 3 — Discover session state (all read-only)
 
 - **Plans in flight**: `Glob ~/.claude/plans/*.md` modified in the last 24h. For each, read the first H1 line; list as `<path> — <H1>`.
-- **TODO files**: `Glob <project>/{TODO.md,todo.md,tot.md,TODOS.md}`. For each file, find entries tagged `[w-<window_code>]` (this window's own entries only). For each matching entry, update its `hb:` field to `hb_ts` in the source file AND in the resume prompt. Per CLAUDE.md liveness protocol: do NOT touch entries owned by other windows.
+- **TODO files**: `Glob <project>/{exclude/TODO.md,TODO.md,todo.md,tot.md,TODOS.md}` — `exclude/TODO.md` is the canonical per-project location (gitignored); check it first. For each file, find entries tagged `[w-<window_code>]` (this window's own entries only). For each matching entry, update its `hb:` field to `hb_ts` in the source file AND in the resume prompt. Per CLAUDE.md liveness protocol: do NOT touch entries owned by other windows.
 - **AGENTS.md chain**: walk from `project_root` down to the deepest path Claude touched this session. List every AGENTS.md on the route.
 - **Recently modified files**: `git ls-files -m -o --exclude-standard` for staged/untracked + `git log --since="24 hours ago" --name-only --pretty=format:` for last-day commits. Dedupe, cap at 20.
 - **Worktrees**: `git worktree list`. ALWAYS include in resume prompt (not just when more than one), because the next window needs to see the full layout to know if it's about to open in the wrong place.
+- **Arbor auto-runs (`/qPlan auto`)**: `Glob <project>/.arbor/sessions/*/` for run dirs, and `git branch --list 'arbor/*'` for experiment/trunk branches. If any exist, the session likely ran (or interrupted) an autonomous optimization loop. Record the run dir(s), the latest `REPORT.md` if present, and the `arbor/*` branches for the resume prompt's "Arbor auto-run handoff" section. Do NOT try to commit `.arbor/` — it is gitignored run state by design.
 - **Background processes**: any background bash jobs (`run_in_background: true`) you started this session that haven't been reported completed. Also any process the user explicitly told you to "watch" or "keep running". If none, omit the section.
 
 ### Step 4 — Generate the resume prompt (UNIQUE FILENAME + STRICT PRE-FLIGHT)
@@ -254,6 +255,14 @@ list the user's most recent 3 prompts verbatim as a fallback.>
 ## Background activities to monitor
 
 - (none) | `<process>` — <what it's doing, where its output lives, expected duration>
+
+## Arbor auto-run handoff (only if a `/qPlan auto` run was active)
+
+- **Run dir(s)**: `<project>/.arbor/sessions/<run>/` (durable Idea Tree + REPORT.md; gitignored, NOT committed)
+- **Experiment/trunk branches**: `<arbor/<run>/<node> ...>`, trunk `arbor/trunk/<run>`
+- **Last known state**: `<best B_dev score / merged? / cycle N of cap>` from `idea_tree.md` / `REPORT.md`
+- **To resume**: re-invoke `/qPlan auto <original goal>` in this worktree — it re-orients from the on-disk Idea Tree instead of re-running INIT. Do not restart from scratch.
+- (omit this whole section if no `.arbor/sessions/*` and no `arbor/*` branches exist)
 
 ## Hermes-learn outcome
 
