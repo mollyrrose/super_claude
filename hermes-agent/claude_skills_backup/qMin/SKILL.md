@@ -17,7 +17,7 @@ Skip for trivial edits (typo, single-line config tweak, doc-only changes) — th
 
 For each proposed or pending change, evaluate:
 
-1. **Minimal scope** — Is every changed line load-bearing for the task? Flag refactors, renames, formatting changes, or "while I'm here" cleanups that the user did not ask for.
+1. **Minimal scope (ponytail lens)** — Is every changed line load-bearing for the task? Flag refactors, renames, formatting changes, or "while I'm here" cleanups that the user did not ask for. Apply the **ponytail decision ladder**: does this need to exist at all (YAGNI)? does the stdlib already do it? a native platform feature? an already-installed dependency? one line instead of fifty? only then the minimum that works. For a deeper, dedicated over-engineering pass invoke the `ponytail-review` skill (on a diff) or `ponytail-audit` (whole repo); record deferred shortcuts as `ponytail:` comments so `ponytail-debt` can harvest them.
 2. **Correctness** — Does the change do what it claims? Trace the call sites; check edge cases the user named.
 3. **Security** — Any new input handled without validation at a trust boundary? New secrets, tokens, or PII paths? Injection risk (shell, SQL, path)? Permission downgrades?
 4. **Maintainability** — New abstractions justified by ≥2 concrete uses? Names accurate? Comments explain *why*, not *what*? Dead code removed?

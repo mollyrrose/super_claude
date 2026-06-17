@@ -21,9 +21,10 @@ Skip when nothing meaningful changed (read-only exploration, single-line tweaks,
    - `INDEX.md` — narrative project overview / session log
    - `exclude/TODO.md` (canonical, gitignored per-project location — check first), else root `TODO.md` / `tot.md` — work-in-progress and open items
    - `CHANGELOG.md` — release-style notes
-   - `STATUS.md` / `SYSTEM_STATUS.md` (e.g. under `SYSTEM_STRATEGIES/` for AI EA) — current
-     "what's running, what's done, what's not" snapshot. **Often goes stale — refresh it
-     whenever the session changes the live state of components.**
+   - `exclude/SYSTEM_STRATEGIES/SYSTEM_STATUS.md` (canonical, gitignored location) — current
+     "what's running, what's done, what's not" snapshot. **Always maintained** — see the
+     "SYSTEM_STATUS + draw.io system map" section below. (Legacy locations like a root
+     `STATUS.md` / `SYSTEM_STATUS.md` still count if a project already has one.)
    - `STARTUP.md`, `AGENTS.md`, project-specific equivalents
    If a doc doesn't exist, do not create it unless the user asks.
 
@@ -42,6 +43,32 @@ Skip when nothing meaningful changed (read-only exploration, single-line tweaks,
 - **Open follow-ups** — items the session identified but did not resolve. Move them to TODO.md, do not bury them in INDEX.md prose.
 - **Reversal of prior plans** — if the session abandoned an earlier approach, mark the corresponding TODO entry resolved/obsolete with a one-line reason.
 - **Arbor `/qPlan auto` runs** — if the session ran an autonomous optimization loop, the authoritative "what changed" is NOT just the chat: read `<project>/.arbor/sessions/<run>/REPORT.md` and `.coordinator/idea_tree.md` for the final/merged B_dev+B_test score, the winning branch, and the key insight. Record in INDEX/CHANGELOG: the goal, the metric delta (baseline -> merged, absolute values not deltas), the merged `arbor/trunk/<run>` branch, and any decision-log entry the run wrote. Do not commit `.arbor/` itself (gitignored run state).
+
+## SYSTEM_STATUS + draw.io system map (maintain every run)
+
+Every project keeps a living system map in **`exclude/SYSTEM_STRATEGIES/`** (the
+gitignored `exclude/` folder; create it if missing). Two files, kept in sync:
+
+- **`SYSTEM_STATUS.md`** — the text snapshot: components, what's running / done /
+  not, key data flows, current blockers. Refresh it whenever this session changed
+  the live state (added/removed a component, changed a flow, shipped/broke a piece).
+- **`system_map.drawio`** — the *visual* of the same architecture, generated and
+  updated via the **`drawio-skill`** (architecture preset). The `.drawio` XML is
+  the source of truth and works on Windows with no extra install; PNG/SVG export
+  is optional and only needs the draw.io desktop CLI.
+
+Rules:
+1. **Keep the two in agreement.** The diagram must depict exactly the components
+   and flows described in `SYSTEM_STATUS.md`. If you edit one because the
+   architecture changed, update the other in the same qUpd run.
+2. **Only redraw when the architecture actually changed** (new/removed component,
+   new/changed data flow) — not for a typo or a status-line tweak. (ponytail
+   discipline: don't regenerate a diagram for nothing.)
+3. **Create both if missing** the first time qUpd runs in a project with real
+   structure. For a trivial/empty project, skip — same bar as the rest of qUpd.
+4. To (re)generate the diagram, invoke the `drawio-skill` with the component list
+   from `SYSTEM_STATUS.md` as input; write the output to
+   `exclude/SYSTEM_STRATEGIES/system_map.drawio`.
 
 ## Commit + push at the end
 

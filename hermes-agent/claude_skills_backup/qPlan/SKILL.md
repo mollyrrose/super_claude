@@ -28,6 +28,13 @@ Skip for:
 - Tasks where you already know exactly what to do and a critique loop would
   be ritual.
 
+**Related skills.** To *seed* a plan from an existing codebase, run the `improve`
+skill first — it audits read-only and emits prioritized, self-contained plans;
+feed those into `/qPlan` as the input plan to deepen. The `pragmatism` lens above
+carries the **ponytail** minimal-code discipline; for a standalone over-engineering
+pass on a draft use `ponytail-review`. Net: `improve` finds *what* is worth doing,
+`/qPlan` hardens *how*, and ponytail keeps it from bloating.
+
 
 
 ## MUST/MUST NOT:
@@ -81,7 +88,7 @@ panel_lenses:                  # max-mode default — all 22 lenses on
   - research                   # learn + sc:research + deep-research-agent
   - prd                        # ecc:plan-prd + ecc:prp-prd + oc-to-prd
   - orchestration              # ecc:plan-orchestrate + ecc:multi-plan + hermes-writing-plans + ecc:gan-planner
-  - pragmatism                 # karpathy-guidelines
+  - pragmatism                 # karpathy-guidelines + ponytail (YAGNI / minimal-code: does this need to exist? stdlib/native/one-line before custom)
   - spike                      # hermes-spike
   - decomposition              # oc-to-issues
   - socratic                   # socratic-mentor (questions, not assertions)

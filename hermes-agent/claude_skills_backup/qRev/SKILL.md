@@ -27,7 +27,7 @@ Apply the full `/qMin` skill verbatim to the **uncommitted diff** (staged + unst
 
 Five axes (from qMin):
 
-1. **Minimal scope** — every changed line load-bearing for the task; flag unrelated refactors/renames/formatting/"while-I'm-here" cleanups.
+1. **Minimal scope (ponytail lens)** — every changed line load-bearing for the task; flag unrelated refactors/renames/formatting/"while-I'm-here" cleanups. Carries the ponytail decision ladder (YAGNI -> stdlib -> native -> existing dep -> one line -> minimum); for a dedicated over-engineering sweep the `ponytail-review` / `ponytail-audit` skills are available.
 2. **Correctness** — does the change do what it claims; trace call sites; check edge cases.
 3. **Security** — new input handled without validation at a trust boundary; new secrets/tokens/PII paths; injection risk (shell/SQL/path); permission downgrades.
 4. **Maintainability** — new abstractions justified by ≥2 concrete uses; names accurate; comments explain *why*; dead code removed.
@@ -142,6 +142,8 @@ After the final synthesis report is produced, **do not wait for user approval to
 For each skipped finding, output: `- skip [P<n>/<source>] <file>:<line>: <one-line reason>`. The user can run the fix manually if they disagree.
 
 The `qMin` skill carries the same auto-fix policy on direct `/qMin` calls — see its SKILL.md. So the behaviour is consistent whether the user runs `/qMin` standalone, `/qRev` (which calls qMin as Phase 0), or auto-`/qRev`.
+
+**Large fix sets — hand off to a cheaper executor (`improve`).** When the punch-list is large enough that fixing inline would be costly (rough guide: >100 LOC across >5 files, or many independent P2/P3 items), do not grind through it on the current high tier. Instead emit an `improve`-style **self-contained implementation plan** (read the `improve` skill) — one plan per cluster of findings, each with its own verification gate — and dispatch execution to a cheaper model per the smart-router tiering in `~/.claude/CLAUDE.md` (sonnet/haiku, or GLM tiers). Keep the high tier for the judgment (the review + the plan); spend the cheap tier on the mechanical fixing. Small fix sets still fix inline as above.
 
 **Auto-mode interaction:** when the `UserPromptSubmit` injector kicks off an auto-`/qRev` or auto-`/qMin`, this auto-fix policy applies too. The flow becomes:
 1. status line: `- auto-qrev: <verdict>, <N> findings`
