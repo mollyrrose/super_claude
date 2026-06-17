@@ -61,11 +61,19 @@ Rules:
 1. **Keep the two in agreement.** The diagram must depict exactly the components
    and flows described in `SYSTEM_STATUS.md`. If you edit one because the
    architecture changed, update the other in the same qUpd run.
-2. **Only redraw when the architecture actually changed** (new/removed component,
-   new/changed data flow) — not for a typo or a status-line tweak. (ponytail
-   discipline: don't regenerate a diagram for nothing.)
-3. **Create both if missing** the first time qUpd runs in a project with real
-   structure. For a trivial/empty project, skip — same bar as the rest of qUpd.
+2. **Missing -> create now, do NOT ask.** If `SYSTEM_STATUS.md` does not exist in
+   a project with real structure, CREATE it on THIS qUpd run and write how the
+   system is currently built (components, what runs / done / not, key data flows)
+   from the repo's present state. Do not merely flag its absence, and do not
+   offer to make it "if you want" / "later" — make it. Create `system_map.drawio`
+   alongside it in the same run. Only skip for a genuinely trivial/empty project
+   (no real structure to describe).
+3. **Redraw guard is for UPDATES only.** Once the map exists, regenerate the
+   diagram only when the architecture actually changed (new/removed component,
+   new/changed data flow) — not for a typo or status-line tweak (ponytail: don't
+   redraw for nothing). This guard NEVER blocks the first creation in rule 2:
+   "the session only added tooling, not a running component" is a valid reason to
+   skip a *redraw*, never a reason to skip *creating* a missing SYSTEM_STATUS.
 4. To (re)generate the diagram, invoke the `drawio-skill` with the component list
    from `SYSTEM_STATUS.md` as input; write the output to
    `exclude/SYSTEM_STRATEGIES/system_map.drawio`.
