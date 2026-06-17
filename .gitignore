@@ -39,6 +39,8 @@ hermes-agent.bak.*/
 /ruvector.db
 /.scratch/
 /tmp/
+# Per-project local task list lives here (exclude/TODO.md) — never committed.
+/exclude/
 
 # ---------- AI video pipeline (heavy installs, per-machine) ----------
 # ComfyUI clone + venv + model weights are too large + machine-specific.

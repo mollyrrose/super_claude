@@ -21,6 +21,9 @@ Tunables (env):
                       The limit is recomputed on every prompt, so switching
                       models mid-session re-budgets the context automatically.
  - CC_CONTEXT_LIMIT_DEFAULT  fallback when model is unknown (default 200_000).
+ - CC_GLM_CONTEXT_LIMIT  window for GLM (z.ai) models -- ids containing "glm"
+                      (default 200_000; raise if a GLM model ships a larger
+                      window). Keeps the budget correct when running on z.ai.
  - CC_BUDGET_SOFT_PCT remaining-% at or below which soft warning fires (default 25).
  - CC_BUDGET_HARD_PCT remaining-% at or below which the wording escalates (default 10).
 """
@@ -60,6 +63,14 @@ _ONE_MILLION_MARKERS = ("[1m]", "-1m", "_1m", "1m-context", "1m_context")
 # catches the 1M model after the "[1m]" suffix has been stripped. Adjust it (or
 # set CC_CONTEXT_LIMIT) if your account runs these models at the 200K window.
 _ONE_MILLION_FAMILIES = ("opus-4",)
+
+# GLM (z.ai) model-id substrings. When the active provider is z.ai the served
+# model id is "glm-..." (e.g. glm-4.6, GLM-5.2), NOT an Anthropic id, so this
+# branch keeps the budget correct under GLM and stops a GLM id from ever being
+# mistaken for a 1M Opus window. GLM-4.x is a 200K window; override with
+# CC_GLM_CONTEXT_LIMIT if a GLM model ships a larger one (e.g. GLM-5.2).
+_GLM_FAMILIES = ("glm",)
+GLM_CONTEXT_LIMIT = int(os.environ.get("CC_GLM_CONTEXT_LIMIT", "200000"))
 
 
 def _read_payload() -> dict:
@@ -211,6 +222,10 @@ def _detect_token_limit(payload: dict) -> int:
         except ValueError:
             pass
     model_id = _active_model_id(payload)
+    # GLM (z.ai) check first: a glm-* id takes its own window and must never be
+    # caught by the 1M-Opus heuristic below.
+    if model_id and any(family in model_id for family in _GLM_FAMILIES):
+        return GLM_CONTEXT_LIMIT
     if model_id and (
         any(marker in model_id for marker in _ONE_MILLION_MARKERS)
         or any(family in model_id for family in _ONE_MILLION_FAMILIES)
