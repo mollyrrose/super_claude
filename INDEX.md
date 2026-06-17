@@ -37,5 +37,10 @@ rules in `CLAUDE.md`. Editing here changes how every Claude Code session behaves
 
 ## Local-only state (gitignored)
 
-`exclude/TODO.md` (task list), `exclude/SYSTEM_STRATEGIES/` (SYSTEM_STATUS.md +
-system_map.drawio), `.arbor/`, `.qplan/`, `.scratch/`. See `.gitignore`.
+All per-project working state lives under `exclude/SYSTEM_STRATEGIES/` (the
+whole `exclude/` tree is gitignored, mandatory):
+- `exclude/SYSTEM_STRATEGIES/TODO.md` — canonical task list,
+- `exclude/SYSTEM_STRATEGIES/SYSTEM_STATUS.md` — system snapshot,
+- `exclude/SYSTEM_STRATEGIES/system_map.drawio` — architecture diagram.
+
+Plus run/scratch state: `.arbor/`, `.qplan/`, `.scratch/`. See `.gitignore`.

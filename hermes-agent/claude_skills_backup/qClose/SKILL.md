@@ -82,7 +82,7 @@ Outcomes:
 ### Step 3 — Discover session state (all read-only)
 
 - **Plans in flight**: `Glob ~/.claude/plans/*.md` modified in the last 24h. For each, read the first H1 line; list as `<path> — <H1>`.
-- **TODO files**: `Glob <project>/{exclude/TODO.md,TODO.md,todo.md,tot.md,TODOS.md}` — `exclude/TODO.md` is the canonical per-project location (gitignored); check it first. For each file, find entries tagged `[w-<window_code>]` (this window's own entries only). For each matching entry, update its `hb:` field to `hb_ts` in the source file AND in the resume prompt. Per CLAUDE.md liveness protocol: do NOT touch entries owned by other windows.
+- **TODO files**: `Glob <project>/{exclude/SYSTEM_STRATEGIES/TODO.md,exclude/TODO.md,TODO.md,todo.md,TODOS.md}` — `exclude/SYSTEM_STRATEGIES/TODO.md` is the canonical per-project location (gitignored); check it first. For each file, find entries tagged `[w-<window_code>]` (this window's own entries only). For each matching entry, update its `hb:` field to `hb_ts` in the source file AND in the resume prompt. Per CLAUDE.md liveness protocol: do NOT touch entries owned by other windows.
 - **AGENTS.md chain**: walk from `project_root` down to the deepest path Claude touched this session. List every AGENTS.md on the route.
 - **Recently modified files**: `git ls-files -m -o --exclude-standard` for staged/untracked + `git log --since="24 hours ago" --name-only --pretty=format:` for last-day commits. Dedupe, cap at 20.
 - **Worktrees**: `git worktree list`. ALWAYS include in resume prompt (not just when more than one), because the next window needs to see the full layout to know if it's about to open in the wrong place.
@@ -201,7 +201,7 @@ Read whichever of these exist at `<expected_cwd>`:
 
 - `INDEX.md`  — project overview / structure (treat as static reference)
 - `STARTUP.md`  — boot ritual / environment setup, if any
-- `TODO.md`, `tot.md`, `TODOS.md`  — cross-session task lists
+- `exclude/SYSTEM_STRATEGIES/TODO.md`, `TODO.md`, `TODOS.md`  — cross-session task lists
 - `AGENTS.md`  — binding work contract for this subtree; walk the chain down to any path you intend to edit and read every AGENTS.md on the route, per global CLAUDE.md "AGENTS.md handling"
 - `CLAUDE.md`  — Claude-specific additive rules at root (the global `~/.claude/CLAUDE.md` is always already loaded; don't re-read it)
 

@@ -67,8 +67,7 @@ hermes
 
 2. **`setup_claude_subscription.py`** — egyparancsos beüzemelő script.
 
-3. **Részletes magyar nyelvű dokumentáció** (`CLAUDE_ELOFIZETES.md`, `index.md`,
-   `tot.md`).
+3. **Részletes magyar nyelvű dokumentáció** (`CLAUDE_ELOFIZETES.md`, `index.md`).
 
 Maga az OAuth-flow, a token-frissítés és a credential-tárolás az upstream
 Hermes-ben **már létezett** — csak az auto-detect indításkor hiányzott.

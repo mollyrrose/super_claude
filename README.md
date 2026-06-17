@@ -132,7 +132,7 @@ git branch -d feat-x
 
 Why it's safe to run two windows simultaneously: an audit of the hook layer confirmed that all per-session state files (`~/.claude/.qrev_auto_state.json`, `.hermes_curator_queue.json`, `.statusline_baselines.json`, `.ecc-session-bridge/`, semgrep findings under each tree's local `.claude/review-log/`) are keyed by `session_id`, not by working-directory path. Two concurrent windows get two distinct session IDs and never collide. Each worktree gets its own `.claude/settings.local.json` — you'll see fresh permission prompts the first time you do something in the new tree; that's expected.
 
-For shared `TODO.md` / `tot.md` files that both windows may read, see the per-window `[w-...]` identifier rule plus the `pid host start hb` liveness protocol in [`CLAUDE.md`](CLAUDE.md). A returning window can deterministically tell whether the original author is still alive (so the task is taken) or dead (so the task can be claimed).
+For shared `exclude/TODO.md` / `TODO.md` files that both windows may read, see the per-window `[w-...]` identifier rule plus the `pid host start hb` liveness protocol in [`CLAUDE.md`](CLAUDE.md). A returning window can deterministically tell whether the original author is still alive (so the task is taken) or dead (so the task can be claimed).
 
 ### 9. `qPlan` panel critic — multi-agent planning fleet
 

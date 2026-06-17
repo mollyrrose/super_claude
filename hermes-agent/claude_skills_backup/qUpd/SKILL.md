@@ -19,7 +19,7 @@ Skip when nothing meaningful changed (read-only exploration, single-line tweaks,
 
 2. **Locate the project's tracking docs.** Look for files in the project root or a docs folder:
    - `INDEX.md` — narrative project overview / session log
-   - `exclude/TODO.md` (canonical, gitignored per-project location — check first), else root `TODO.md` / `tot.md` — work-in-progress and open items
+   - `exclude/SYSTEM_STRATEGIES/TODO.md` (canonical, gitignored per-project location — check first), else an older `exclude/TODO.md` or root `TODO.md` — work-in-progress and open items
    - `CHANGELOG.md` — release-style notes
    - `exclude/SYSTEM_STRATEGIES/SYSTEM_STATUS.md` (canonical, gitignored location) — current
      "what's running, what's done, what's not" snapshot. **Always maintained** — see the
@@ -77,6 +77,12 @@ Rules:
 4. To (re)generate the diagram, invoke the `drawio-skill` with the component list
    from `SYSTEM_STATUS.md` as input; write the output to
    `exclude/SYSTEM_STRATEGIES/system_map.drawio`.
+5. **Consolidate + gitignore + INDEX.** The canonical task list also lives in this
+   folder: `exclude/SYSTEM_STRATEGIES/TODO.md`. Ensure `exclude/` is in
+   `.gitignore` (mandatory — add it if missing). If an older `TODO.md` /
+   `SYSTEM_STATUS.md` sits at the repo root or directly under `exclude/`, MOVE it
+   here (reorganize, no duplicates) and then **rewrite `INDEX.md`** so it points
+   at the new `exclude/SYSTEM_STRATEGIES/` paths.
 
 ## Commit + push at the end
 

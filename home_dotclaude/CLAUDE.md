@@ -118,7 +118,7 @@ Hooks and per-session state files in `~/.claude/` (curator queue, qrev counters,
 
 ### Shared TODO files — per-window entries only
 
-If a project has a shared `TODO.md` / `todo.md` / `tot.md` (or any other cross-session task list), multiple Claude Code windows (different branches, different worktrees, different sessions) may all read and write the same file. **Don't** write notes like "NOT this window (other branch, other window)" or "ignore — different session" into shared TODO files. Those notes are meaningless to the other window reading the same file, and they collide.
+If a project has a shared `TODO.md` / `todo.md` (or any other cross-session task list), multiple Claude Code windows (different branches, different worktrees, different sessions) may all read and write the same file. **Don't** write notes like "NOT this window (other branch, other window)" or "ignore — different session" into shared TODO files. Those notes are meaningless to the other window reading the same file, and they collide.
 
 Instead, every TODO entry you create must be scoped to a **window identifier** that is unique to *this specific window*, not just to the branch. Two Claude Code windows can be open on the same branch at the same time, so the branch name alone is not enough — the identifier has to disambiguate window-from-window.
 

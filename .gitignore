@@ -168,7 +168,6 @@ hermes-agent.bak.*/
 /hermes-agent/setup_claude_subscription.py
 /hermes-agent/toolsets.py
 /hermes-agent/toolset_distributions.py
-/hermes-agent/tot.md
 /hermes-agent/trajectory_compressor.py
 /hermes-agent/utils.py
 /hermes-agent/uv.lock
