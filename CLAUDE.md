@@ -68,19 +68,44 @@ When in doubt: if removing the character wouldn't reduce the meaning a plain-tex
 
 ## Hooks (don't break them)
 
-`~/.claude/settings.json` chains these hook scripts:
+`~/.claude/settings.json` runs these hooks. The two HOT-PATH events
+(`UserPromptSubmit`, `PostToolUse`) are now consolidated behind a single
+dispatcher, `scripts/hook_dispatch.py` (installed to
+`~/.claude/scripts/hook_dispatch.py`): instead of N separate `python.exe`
+processes per event, settings.json invokes the dispatcher once with the event
+name as `argv[1]`, and it imports + runs each underlying hook's `main()`
+in-process. Rationale: a cold Windows interpreter spawn costs ~1.2-1.6s, so
+running 4 prompt hooks (and 2 edit hooks) as separate processes added seconds of
+latency per turn; one interpreter start instead of 4/2 cuts that ~3-4x (cleanly
+4x on PostToolUse, ~468 ms saved per edit). The individual hook files are
+UNCHANGED -- they still run standalone and their `*_smoketest.py` still pass.
 
-- `PostToolUse(Write|Edit)`: `semgrep_postedit_hook.py` then `qrev_edit_counter.py`
-- `UserPromptSubmit`: `curator_prompt_hook.py`, `smart_router_prompt_hook.py`, `context_budget_gate.py`, `qrev_auto_inject.py`
+- `PostToolUse(Write|Edit)` -> `hook_dispatch.py PostToolUse`, which runs
+  `semgrep_postedit_hook.py` then `qrev_edit_counter.py`. A hook exiting 2 (with
+  a stderr message) propagates: the dispatcher re-emits that stderr and exits 2.
+- `UserPromptSubmit` -> `hook_dispatch.py UserPromptSubmit`, which runs
+  `curator_prompt_hook.py`, `smart_router_prompt_hook.py`, `context_budget_gate.py`,
+  `qrev_auto_inject.py` (in that order). Each hook emits a
+  `hookSpecificOutput.additionalContext` JSON (or nothing); the dispatcher
+  extracts every hook's `additionalContext` and emits ONE merged JSON object
+  (blank-line-joined, original order preserved) -- equivalent to how Claude Code
+  concatenates context across separately-registered hooks.
   - `smart_router_prompt_hook.py` (rules in `smart_router_rules.py`) emits both a skill suggestion and a `[model-router hint]` for subagent model tiering (haiku/sonnet/opus). The tiering policy Claude follows lives in the global `~/.claude/CLAUDE.md` under "Subagent model routing (tiering)". `context_budget_gate.py` is now tracked in this repo at `scripts/` and re-detects the active model's window every prompt (Opus -> 1M, GLM/z.ai -> 200K via `CC_GLM_CONTEXT_LIMIT`, else 200K), so a `/model` switch (or running on GLM) re-budgets context. The GLM (z.ai) alternate-provider groundwork and its launcher (`scripts/claude-glm.ps1`) are documented in the global `~/.claude/CLAUDE.md` under "GLM (z.ai)".
-- `Stop`: `curator_stop_hook.py`
-- `PreCompact`: `curator_precompact_hook.py`
-- `SessionEnd`: `rev_learn_sessionend.py` (async)
+- `Stop`: `curator_stop_hook.py` (single hook, not dispatched)
+- `PreCompact`: `curator_precompact_hook.py` (single hook, not dispatched)
+- `SessionEnd`: `rev_learn_sessionend.py` (async, single hook, not dispatched)
+
+Kill switch for the dispatcher: revert the `UserPromptSubmit`/`PostToolUse`
+arrays in `settings.json` to the per-hook command list (a backup is at
+`~/.claude/settings.json.bak.pre-hook-dispatch`), or set
+`CC_HOOK_DISPATCH_DISABLE=1` to make the dispatcher a pass-through no-op without
+editing settings.
 
 Changes to these scripts should:
-1. Always preserve the `silent no-op on missing / malformed stdin` pattern (see `semgrep_postedit_hook.py:42-50`). A hook that crashes on a bad payload would block every Write/Edit.
+1. Always preserve the `silent no-op on missing / malformed stdin` pattern (see `semgrep_postedit_hook.py:42-50`). A hook that crashes on a bad payload would block every Write/Edit. The dispatcher follows the same rule: any hook that raises / fails to import is isolated as a no-op, and the dispatcher itself exits 0 (UserPromptSubmit) on any internal error.
 2. Exit 0 by default; reserve non-zero for genuinely blocking conditions.
-3. Be tested with the matching `_smoketest.py` next door before wiring.
+3. Be tested with the matching `_smoketest.py` next door before wiring (the dispatcher has `scripts/hook_dispatch_smoketest.py`). When adding/removing/reordering a hot-path hook, update `REGISTRY` in `hook_dispatch.py` AND the matching `settings.json` entry stays a single dispatcher call.
+4. Remember hooks run from two homes: most from `~/.claude/scripts/` (copied from this repo's `scripts/`), and the `curator_*`/`smart_router_*` ones directly from `hermes-agent/claude_code_integration/`. After editing a `scripts/` hook, copy it to `~/.claude/scripts/` for it to take effect.
 
 ## Multi-window safety and project boundaries
 

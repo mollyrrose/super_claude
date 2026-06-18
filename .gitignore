@@ -36,7 +36,11 @@ Thumbs.db
 hermes-agent.bak.*/
 
 # ---------- top-level junk ----------
-/ruvector.db
+# ruflo-core plugin (ruvnet/ruflo) writes a redb "ruvector.db" into whatever
+# directory a ruflo agent runs from, so it appears scattered across the tree
+# (repo root, hermes-agent/, ai_video/comfyui/, ...). Ignore it everywhere, not
+# just at known paths.
+ruvector.db
 /.scratch/
 /tmp/
 # Per-project local task list lives here (exclude/TODO.md) — never committed.
@@ -176,6 +180,4 @@ hermes-agent.bak.*/
 /hermes-agent/run_agent.py
 
 # hermes-agent state files
-/hermes-agent/claude_code_integration/ruvector.db
 /hermes-agent/claude_code_integration/__pycache__/
-/hermes-agent/ruvector.db
