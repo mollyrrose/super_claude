@@ -223,6 +223,44 @@ that works instead of clever machinery.
 - **Kill switch.** Anything you automate must be easy to disable or revert —
   note how to turn it off at the moment you add it.
 
+## Hot-path hook consolidation (one process, not N)
+
+When a latency-sensitive event fires SEVERAL command hooks in series — the
+clearest case is Claude Code's `UserPromptSubmit` (runs before every prompt is
+answered) and `PostToolUse` (runs after every Write/Edit) — each hook registered
+as its own command is a SEPARATE interpreter process. On Windows a cold
+`python.exe` spawn costs ~1.2-1.6s (cold file cache / AV first-touch), so N hooks
+add N startups of latency to every turn, even though the hooks' own work is
+typically only tens of milliseconds. Measured on this setup: 4 prompt hooks +
+2 edit hooks were paying interpreter startup 4x / 2x per turn.
+
+Rule: when more than one Python (or other interpreted) hook runs on the same
+hot-path event, route them through ONE dispatcher process that imports and calls
+each hook's `main()` in-process, instead of registering N separate commands.
+One interpreter start instead of N. Measured ~3-4x faster on the hot path
+(cleanly 4x on a 2-hook PostToolUse, ~468 ms saved per edit).
+
+Preserve the per-hook contracts when consolidating:
+- Keep each hook file UNCHANGED so it still runs standalone and its
+  `*_smoketest.py` still passes; the dispatcher feeds each a fresh copy of the
+  stdin payload and captures its stdout/stderr/exit code.
+- Merge outputs correctly: for `UserPromptSubmit`, extract every hook's
+  `hookSpecificOutput.additionalContext` and emit ONE combined JSON object
+  (original order preserved) — concatenating raw stdout would produce multiple
+  JSON objects and garble. For `PostToolUse`, propagate a hook's exit-2 + stderr
+  so a real blocker still surfaces.
+- Keep the silent-no-op invariant: a hook that raises or fails to import is
+  isolated as a no-op and never blocks the user.
+- Kill switch: revert the event's array in `settings.json` to the per-hook
+  command list (back up first), or gate the dispatcher behind a
+  `*_DISABLE=1` env var.
+
+Reference implementation: `super_claude/scripts/hook_dispatch.py` (+ its
+`hook_dispatch_smoketest.py`), wired in `~/.claude/settings.json`. Don't pre-emptively
+consolidate a single-hook event or a non-hot-path event (`Stop`, `SessionEnd`,
+`PreCompact`) — measure first; this only pays off when 2+ hooks share a
+latency-sensitive event.
+
 ## Scan GitHub code before downloading it (skillspector gate)
 
 Before cloning, installing, or otherwise trusting ANY external code from GitHub
