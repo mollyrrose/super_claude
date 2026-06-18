@@ -168,6 +168,27 @@ When in doubt: if the terminal would sit idle until I type something,
 the banner is required. False positives are cheap; missing one means a
 window sits unused for minutes.
 
+### Self-check — banner and plain-language summary travel together
+
+The banner and the simplified-logic layer ("Plain-language questions to
+the user" above) are two halves of the same rule. Whenever I am about to
+emit the `USER INPUT REQUIRED` banner, I MUST first verify — as a final
+check before sending — that the message also contains an
+**easy-to-understand, plain-language summary** of what I'm asking
+(the 17-year-old-logic restatement). Both must be present, every time:
+
+- Banner present but NO plain-language summary -> incomplete. Add the
+  simplified-logic restatement before sending.
+- Plain-language summary present but NO banner -> incomplete. Add the
+  banner as the last line.
+- Neither -> this is not a question/approval turn, so neither is needed.
+
+So the check is concretely: "Am I emitting the banner? If yes, is there a
+plain-language summary of the question right above it? If not, write one
+before sending." The summary uses the same rules as the dual-layer
+question form (plain words, short sentences, one idea per sentence,
+match the user's language, simpler logic NOT slang).
+
 ## Pushback expected
 
 - Ask clarifying questions when a request is ambiguous or under-specified.
