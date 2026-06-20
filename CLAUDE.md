@@ -91,7 +91,14 @@ UNCHANGED -- they still run standalone and their `*_smoketest.py` still pass.
   (blank-line-joined, original order preserved) -- equivalent to how Claude Code
   concatenates context across separately-registered hooks.
   - `smart_router_prompt_hook.py` (rules in `smart_router_rules.py`) emits both a skill suggestion and a `[model-router hint]` for subagent model tiering (haiku/sonnet/opus). The tiering policy Claude follows lives in the global `~/.claude/CLAUDE.md` under "Subagent model routing (tiering)". `context_budget_gate.py` is now tracked in this repo at `scripts/` and re-detects the active model's window every prompt (Opus -> 1M, GLM/z.ai -> 200K via `CC_GLM_CONTEXT_LIMIT`, else 200K), so a `/model` switch (or running on GLM) re-budgets context. The GLM (z.ai) alternate-provider groundwork and its launcher (`scripts/claude-glm.ps1`) are documented in the global `~/.claude/CLAUDE.md` under "GLM (z.ai)".
-- `Stop`: `curator_stop_hook.py` (single hook, not dispatched)
+- `Stop`: `curator_stop_hook.py` then `banner_stop_hook.py` (two hooks; Stop is
+  NOT a hot path, so they stay as separate commands — not dispatched/consolidated).
+  `banner_stop_hook.py` (in `scripts/`, installed to `~/.claude/scripts/`) is the
+  USER INPUT REQUIRED banner backstop: if the final message looks like it awaits
+  input but lacks the banner, it returns a Stop "block" so the turn continues and
+  the banner is added. Conservative + loop-guarded (max 2 blocks/session).
+  Kill switch: `BANNER_HOOK_DISABLE=1` or remove its command from `settings.json`
+  Stop (backup at `~/.claude/settings.json.bak.pre-banner-hook`).
 - `PreCompact`: `curator_precompact_hook.py` (single hook, not dispatched)
 - `SessionEnd`: `rev_learn_sessionend.py` (async, single hook, not dispatched)
 
