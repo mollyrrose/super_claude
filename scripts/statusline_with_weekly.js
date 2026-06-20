@@ -26,6 +26,8 @@ const path = require('path');
 const MAX_STDIN = 1024 * 1024;
 const BAR_WIDTH = 5;
 const AUTO_COMPACT_BUFFER_PCT = 16.5;
+// Orphan guard: drop process-progress entries not updated within this window.
+const PROCESS_PROGRESS_TTL_MS = 6 * 3600 * 1000;
 
 const RESET = '\x1b[0m';
 const DIM = '\x1b[2m';
@@ -262,6 +264,77 @@ function readBridge(sessionId) {
   }
 }
 
+// Process-progress bars: a running process (a /qGoal, /tw, a workflow, any long
+// job) writes its progress into ~/.claude/.process_progress/<session>.json via
+// scripts/process_progress.js. The statusline renders one thin bar per active
+// entry on a line BELOW the quota bars. Per-session file keeps each window's
+// processes separate; a shared _fallback.json is read when no per-session file
+// exists (single-window convenience). Entries are {id,label,pct,started_at,
+// eta_seconds,updated_at,done}. pct (task-based) wins; else pct is derived from
+// started_at + eta_seconds (time-based). done/stale entries are dropped.
+function _processDir() {
+  const claudeDir = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
+  return path.join(claudeDir, '.process_progress');
+}
+
+function _safeSession(sessionId) {
+  return String(sessionId || '').replace(/[^A-Za-z0-9_-]/g, '');
+}
+
+function readProcessProgress(sessionId) {
+  try {
+    const dir = _processDir();
+    if (!fs.existsSync(dir)) return [];
+    const safe = _safeSession(sessionId);
+    let file = safe ? path.join(dir, `${safe}.json`) : '';
+    if (!file || !fs.existsSync(file)) {
+      const fb = path.join(dir, '_fallback.json');
+      if (fs.existsSync(fb)) file = fb; else return [];
+    }
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const list = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.processes) ? raw.processes : []);
+    const now = Date.now();
+    const out = [];
+    for (const e of list) {
+      if (!e || e.done === true) continue;
+      const stamp = Date.parse(e.updated_at || e.started_at || '') || 0;
+      if (stamp && now - stamp > PROCESS_PROGRESS_TTL_MS) continue;
+      let pct = (typeof e.pct === 'number') ? e.pct : null;
+      if (pct === null && e.started_at && typeof e.eta_seconds === 'number' && e.eta_seconds > 0) {
+        const elapsed = (now - (Date.parse(e.started_at) || now)) / 1000;
+        pct = Math.round((elapsed / e.eta_seconds) * 100);
+      }
+      if (pct === null) pct = 0;
+      pct = Math.max(0, Math.min(100, pct));
+      out.push({ label: String(e.label || 'proc').slice(0, 16), pct });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+// Slim bar: a thin single-stroke horizontal line (heavy U+2501 filled, light
+// U+2500 empty) instead of the full-height block bar — visually slimmer, to
+// match the thin look of the auto-compact indicator. Used only for process bars.
+function buildSlimBar(usedPct, colorCode) {
+  const used = Math.max(0, Math.min(100, Math.round(usedPct)));
+  const filled = used === 0 ? 0 : Math.max(1, Math.round((used / 100) * BAR_WIDTH));
+  const bar = '━'.repeat(filled) + '─'.repeat(BAR_WIDTH - filled);
+  return `${colorCode}${bar}${RESET}${DIM}${used}%${RESET}`;
+}
+
+function buildProcessBars(entries) {
+  if (!entries || !entries.length) return '';
+  // One slim bar per running process, each STACKED on its own line below the
+  // quota bars. The label is the short, human-readable description the process
+  // supplies (e.g. "tesztek futnak"), NOT a raw job id. Cyan reads as "work in
+  // flight", distinct from the green->red quota bars (where red = warning).
+  return entries
+    .map(e => `\n${DIM}${e.label}${RESET} ${buildSlimBar(e.pct, CYAN)}`)
+    .join('');
+}
+
 function main() {
   let input = '';
   const t = setTimeout(() => process.exit(0), 3000);
@@ -317,6 +390,10 @@ function main() {
     if (fhBar) out += `${DIM}│${RESET} ${fhBar}`;
     if (sdBar) out += `${DIM}│${RESET} ${sdBar}`;
 
+    // Process-progress bars on a line below the quota bars (only when active).
+    const procBars = sessionId ? buildProcessBars(readProcessProgress(sessionId)) : '';
+    if (procBars) out += procBars;
+
     process.stdout.write(out);
   });
 }
@@ -334,6 +411,9 @@ module.exports = {
   buildPaceArrow,
   shortenModelName,
   rebaselineUsed,
+  readProcessProgress,
+  buildProcessBars,
+  buildSlimBar,
 };
 
 if (require.main === module) main();

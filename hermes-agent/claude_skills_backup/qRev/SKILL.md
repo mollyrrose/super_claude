@@ -17,6 +17,18 @@ For lighter checks, the original commands are still right:
 - post-implementation validation -> `/check`
 - root-cause one specific failure -> `/hunt`
 
+## Review depth — whole-file + full context, NOT diff-only (read this first)
+
+`/qRev`'s review must reach the same depth `/qPlan` ("ultra plan") reasons at: it does **not** stop at the diff hunks and their few surrounding lines. For every file in scope, the agent-driven phases (Phase 0 `qMin` and Phase B fleet) read the **entire file** and then trace its **full context** before judging the change. Concretely, for each changed file the reviewer must:
+
+- **Read the whole file end-to-end**, not just the changed hunks — a diff line is only correct relative to the module it lives in (its invariants, error handling, lifecycle, existing patterns).
+- **Follow the dependency context outward** — the imports the file pulls in, the call sites that reach the changed symbols (callers), the functions/classes the change calls (callees), subclasses/implementers, and the config/schema/fixtures/tests bound to the changed code. Read those related files too when the change's correctness depends on them. The point is to catch cross-file consequences a diff-local read cannot see (a caller that now passes the wrong shape, an invariant held elsewhere, a test that silently no longer exercises the path).
+- **Judge the change against the file's and module's actual behaviour**, not against the hunk in isolation.
+
+This is the core of what makes `/qRev` deeper than a per-commit `/qMin` glance. The diff tells you *what changed*; the whole file + its context tells you *whether that change is correct where it lands*. When scope is large and reading every dependency in full would blow the budget, read the directly-changed files in full unconditionally, and pull in dependency files by relevance (closest call sites and the contracts the change touches first) — and record in the report's "Coverage gaps" section any context you could not fully read, rather than silently reviewing diff-only.
+
+**Exception — Phase A stays changed-lines-only by design.** The deterministic gate (semgrep + `CODING_STANDARDS.md` non-negotiable rules) already scans whole files at the tool level, and its LLM standards check is intentionally a cheap changed-lines pass. Do not widen Phase A; the whole-file + context depth applies to the *agent-driven* phases (0 and B).
+
 ## What to do
 
 Run **three** phases in order. Each later phase inherits earlier phases' findings as context.
@@ -24,6 +36,8 @@ Run **three** phases in order. Each later phase inherits earlier phases' finding
 ### Phase 0 — qMin on the pending diff (NEW, runs first)
 
 Apply the full `/qMin` skill verbatim to the **uncommitted diff** (staged + unstaged) — i.e., exactly what the user is about to commit. Read `~/.claude/skills/qMin/SKILL.md` and follow its "What to review" and "Output" sections exactly.
+
+Apply the five axes at the **whole-file + full-context depth** from the "Review depth" section above — for each changed file, read the entire file and trace its dependency context (callers, callees, imports, bound config/schema/tests), not just the diff hunks. The diff defines *what to focus on*; the surrounding file and its context define *whether the change is correct there*.
 
 Five axes (from qMin):
 
@@ -74,9 +88,31 @@ Otherwise continue to Phase B.
 
 Invoke `/rev` with mode `exhaustive` (read `~/.claude/skills/rev/SKILL.md`, "`/rev exhaustive` (3-pass)" section). All three passes run with the same skill-bundle map, agent roster, and synthesis rules. **Pass-1 inherits Phase 0 findings as context** — the agents must see them so they don't re-derive the same issues.
 
+**Whole-file + context directive for every agent.** When constructing each agent's prompt from `/rev`'s "Agent prompt template", inject the depth requirement from the "Review depth" section above into the agent's instructions: the `SCOPE` file list is the set of changed files, but each agent MUST read every scope file **in full** and trace its **dependency context** (callers, callees, imports, subclasses/implementers, and the config/schema/fixtures/tests bound to the change) — not review the diff hunks in isolation. Add these lines to the agent prompt's `YOUR FOCUS` block:
+
+```
+REVIEW DEPTH (mandatory): The SCOPE files are what CHANGED, not the limit of what you READ.
+- Read each SCOPE file end-to-end before judging any change in it.
+- Follow the change outward: open the call sites that reach the changed symbols,
+  the callees the change invokes, and the config/schema/tests bound to it. Read
+  those files when the change's correctness depends on them.
+- Judge each change against the file's and module's real behaviour, not the hunk
+  alone. Diff-local-only findings are insufficient — cross-file consequences are
+  the point of this pass.
+- If scope is too large to read every dependency in full, read the directly
+  changed files fully and pull dependencies by relevance; list what you could not
+  fully read under "Coverage gaps" instead of silently reviewing diff-only.
+```
+
 If a `topic:<name>` arg was passed, **each pass's agent roster is filtered** to the topic-relevant agent list from `/rev`'s "topic:*" table (intersected with the pass's normal roster). This gives an exhaustive 3-pass *depth* but narrowed to one *lens*. See the argument-forms table below.
 
-Wall-clock: 15–30 min (default scope), 5–10 min (topic-filtered exhaustive). Cost is covered by the Claude Pro/Max subscription — there is no per-token bill; only your time matters and 15–30 min is well within budget.
+**Run the COMPLETE roster — every agent, every pass. This is non-negotiable.** A default (non-`topic`, non-`fast`) `/qRev` runs the **full `/rev exhaustive` roster across all three passes — roughly 12–15 agents in total** (Pass 1 quality/correctness, Pass 2 security, Pass 3 architecture+DB+perf+tests, per `/rev`'s "`/rev exhaustive` (3-pass)" list). Dispatch the full roster for each pass. Do **not** silently drop, sample, or "pick a few representative" agents to save time.
+
+**A 3-lens (or any hand-picked small subset) run is a VIOLATION unless the user passed `topic:<name>` or `fast`.** If you catch yourself about to launch "qRev fleet (3 lenses)" — e.g. just security + typescript + code-reviewer — stop: that is a plain `/rev`, not `/qRev exhaustive`. The whole point of `/qRev` over a quick `/rev` is the exhaustive multi-pass coverage. The only sanctioned ways to run fewer agents are: `topic:<name>` (narrows to that lens's roster) or `fast` (Phase A only, no fleet). Absent those args, launch the entire pass roster — the value of the fleet is independent coverage, and a missing agent is a missing lens. Launch each pass's whole roster in parallel (one message, multiple Agent calls).
+
+An agent that returns after **0–1 tool uses** (or near-instantly, with no `Read`/`Grep` of the scope files) has **not** done the whole-file + context review this skill requires — treat it as a **failed dispatch, not a clean verdict**: re-dispatch it once with an explicit reminder that it must actually read the scope files in full before reporting. If it fails again, record it under "Coverage gaps" (`agent <name>: did not engage scope`) rather than counting its empty result as "CLEAN". A pass is only complete when every agent in its roster has actually engaged the scope. (Note: a live progress display showing an agent at "0 tool uses … Initializing…" just means it has not started yet — that is normal mid-run, not a no-op; the rule above is about agents that *finish* without engaging.)
+
+Wall-clock: 15–30 min (default scope), 5–10 min (topic-filtered exhaustive). Cost is covered by the active subscription (whichever provider is in use) — there is no per-token bill; only your time matters and 15–30 min is well within budget.
 
 ### Final synthesis
 
