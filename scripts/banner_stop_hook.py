@@ -82,13 +82,14 @@ def _write_state(data: dict) -> None:
         pass
 
 
-def extract_last_assistant_text(transcript_path: Path) -> str:
-    """Return the concatenated text of the last assistant message that carried
-    a text block. Returns '' if none / unreadable."""
+def _assistant_texts_from_end(transcript_path: Path, limit: int):
+    """Yield the joined text of each text-bearing assistant message, newest
+    first, up to `limit` of them. '' for unreadable / none."""
     try:
         lines = transcript_path.read_text(encoding="utf8", errors="replace").splitlines()
     except Exception:
-        return ""
+        return
+    found = 0
     for line in reversed(lines):
         line = line.strip()
         if not line:
@@ -104,13 +105,39 @@ def extract_last_assistant_text(transcript_path: Path) -> str:
                  if isinstance(c, dict) and c.get("type") == "text"]
         joined = "".join(texts).strip()
         if joined:
-            return joined
-        # An assistant message with only tool_use/thinking — keep scanning back
-        # is wrong (that would skip past the real final text); but the FINAL
-        # user-facing turn always ends on a text block, so the first text-bearing
-        # assistant message from the end is the reply. If this one had no text,
-        # it's a trailing tool turn; continue to find the text reply.
+            yield joined
+            found += 1
+            if found >= limit:
+                return
+
+
+def extract_last_assistant_text(transcript_path: Path) -> str:
+    """Return the concatenated text of the last assistant message that carried
+    a text block. Returns '' if none / unreadable. Used for the *awaiting-input*
+    check, which must be precise to the final reply."""
+    for txt in _assistant_texts_from_end(transcript_path, 1):
+        return txt
     return ""
+
+
+# How many trailing assistant text-blocks to scan for the banner. The banner and
+# the awaiting-input question are always in the SAME response turn, but a turn can
+# be split across multiple assistant entries (text -> tool_use -> text), so the
+# banner may sit in a sibling block, not the single last one. Scanning a few back
+# defends against that split AND against a transcript-flush race (the final block
+# not yet on disk when the Stop hook fires) — the exact false-block reported in
+# practice: banner clearly present, hook said missing. Bounded small so a genuine
+# missing banner in the CURRENT turn is still caught.
+BANNER_SCAN_DEPTH = 3
+
+
+def banner_present_in_recent(transcript_path: Path) -> bool:
+    """True if the banner appears in ANY of the last BANNER_SCAN_DEPTH assistant
+    text-blocks. Leniency here only ever REDUCES false blocks."""
+    for txt in _assistant_texts_from_end(transcript_path, BANNER_SCAN_DEPTH):
+        if has_banner(txt):
+            return True
+    return False
 
 
 def has_banner(text: str) -> bool:
@@ -149,14 +176,20 @@ def looks_like_awaiting_input(text: str) -> bool:
     return False
 
 
-def decide(text: str, session_id: str, state: dict):
-    """Return (action, reason, new_state). action in {allow, block, warn}."""
+def decide(text: str, session_id: str, state: dict, banner=None):
+    """Return (action, reason, new_state). action in {allow, block, warn}.
+
+    `banner` lets the caller supply a wider banner-presence result (e.g. scanned
+    across the last few assistant blocks via banner_present_in_recent). When None,
+    fall back to checking the single `text` — keeps the standalone/smoketest
+    contract intact."""
     new_state = dict(state)
     sid = session_id or "_nosession"
     sess = dict(new_state.get(sid, {"blocks": 0}))
 
     awaiting = looks_like_awaiting_input(text)
-    banner = has_banner(text)
+    if banner is None:
+        banner = has_banner(text)
 
     if not awaiting or banner:
         # Clean turn — reset the per-session block counter.
@@ -206,9 +239,14 @@ def main() -> int:
         return 0
 
     try:
-        text = extract_last_assistant_text(Path(transcript_path_str))
+        tpath = Path(transcript_path_str)
+        text = extract_last_assistant_text(tpath)
+        # Banner presence is checked across the last few assistant blocks (the
+        # whole response turn), not just `text`, so a banner in a sibling block
+        # or one not yet flushed to disk is not falsely reported missing.
+        banner = banner_present_in_recent(tpath)
         state = _read_state()
-        action, reason, new_state = decide(text, session_id, state)
+        action, reason, new_state = decide(text, session_id, state, banner=banner)
         _write_state(new_state)
         if action == "block":
             print(json.dumps({"decision": "block", "reason": reason}))

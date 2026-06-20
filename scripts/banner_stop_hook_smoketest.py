@@ -107,6 +107,37 @@ with tempfile.TemporaryDirectory() as d:
 # --- extract returns '' on unreadable ---
 check(bh.extract_last_assistant_text(Path(_tmp) / "nope.jsonl") == "", "missing transcript -> empty")
 
+# --- banner_present_in_recent: banner in a PRIOR block of the same turn ---
+# Reproduces the real false-block: the awaiting-input question + banner were
+# emitted, then a trailing assistant entry without the banner is the LAST one.
+# extract_last_assistant_text would miss the banner; the wider scan must find it.
+with tempfile.TemporaryDirectory() as d:
+    tp = Path(d) / "split.jsonl"
+    rows = [
+        {"type": "user", "message": {"content": [{"type": "text", "text": "q"}]}},
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "Megerosited?\n" + BANNER}]}},
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "(folytatas, banner nelkul)"}]}},
+    ]
+    tp.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf8")
+    check(not bh.has_banner(bh.extract_last_assistant_text(tp)),
+          "single-last extractor misses banner in prior block")
+    check(bh.banner_present_in_recent(tp),
+          "banner_present_in_recent finds banner in prior block of same turn")
+    last = bh.extract_last_assistant_text(tp)
+    a, _, _ = bh.decide(last, "split", {}, banner=bh.banner_present_in_recent(tp))
+    check(a == "allow", "decide allows when banner is in a sibling block")
+
+# --- banner genuinely absent across recent blocks -> still detected missing ---
+with tempfile.TemporaryDirectory() as d:
+    tp = Path(d) / "nobanner.jsonl"
+    rows = [
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "Elso valasz."}]}},
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "Melyik opciot valasztod?"}]}},
+    ]
+    tp.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf8")
+    check(not bh.banner_present_in_recent(tp),
+          "no banner anywhere recent -> still reported missing")
+
 # --- disable kill switch makes main a no-op (returns 0) ---
 os.environ["BANNER_HOOK_DISABLE"] = "1"
 check(bh.main() == 0, "disable kill switch -> no-op exit 0")
