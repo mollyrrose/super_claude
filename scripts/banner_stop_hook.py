@@ -40,13 +40,25 @@ BANNER_TEXT = "USER INPUT REQUIRED"
 MAX_BLOCKS_PER_SESSION = 2
 STATE_FILENAME = ".banner_hook_state.json"
 
-# Approval / awaiting-input phrases (checked near the END of the message only).
+# Imperative / interrogative approval phrases that genuinely signal an awaiting
+# prompt and are rare in ordinary statements. Matched within the FINAL line only.
 _APPROVAL_RE = re.compile(
     r"\b("
     r"yes\s*/\s*no|y\s*/\s*n|which option|shall i|should i (?:proceed|continue)|"
     r"do you want|let me know|please confirm|awaiting your|waiting on you|"
-    r"jóváhagy|mehet\??|melyik|szeretnéd|akarod|válassz|döntsd el"
+    r"válassz|döntsd el"
     r")\b",
+    re.IGNORECASE,
+)
+
+# Ambiguous Hungarian verbs that appear constantly in conditional / subordinate
+# clauses ("Ha szeretnéd, ...", "...mehet a deploy.", "jóváhagyom a tervet").
+# These are NOT prompts in those forms, so count them as awaiting-input ONLY in
+# explicit question form — directly followed (within a few words) by a question
+# mark on the same line. This is what kills the false positive that blocked a
+# plain "...lezárhatod." status message.
+_HU_QUESTION_RE = re.compile(
+    r"\b(szeretnéd|akarod|mehet|melyik|jóváhagy\w*)\b[^?\n]{0,40}\?",
     re.IGNORECASE,
 )
 
@@ -106,21 +118,33 @@ def has_banner(text: str) -> bool:
 
 
 def looks_like_awaiting_input(text: str) -> bool:
-    """Conservative: True only on a strong end-of-message prompt signal."""
+    """Conservative: True only when the message's FINAL line is actually posed as
+    a prompt — a trailing question mark, an imperative/interrogative approval
+    phrase, or a Hungarian approval verb in explicit question form.
+
+    Restricting to the final line (not the whole 400-char tail) is deliberate: a
+    conditional clause such as "Ha szeretnéd, ... — de most lezárhatod." contains
+    an approval verb mid-sentence but is NOT awaiting input, and the old tail
+    scan blocked exactly that. A real awaiting-input prompt closes ON the ask."""
     if not text:
         return False
     stripped = text.rstrip()
-    # Last non-empty line ends with a question mark.
     non_empty = [ln.strip() for ln in stripped.splitlines() if ln.strip()]
-    if non_empty:
-        last = non_empty[-1]
-        # Ignore lines that are obviously code/markup, and overly long paragraphs
-        # (a real awaiting-input prompt is usually a short line).
-        if last.endswith("?") and len(last) <= 200 and not last.startswith(("#", "```", "|")):
-            return True
-    # Approval phrase in the final stretch of the message.
-    tail = stripped[-400:]
-    if _APPROVAL_RE.search(tail):
+    if not non_empty:
+        return False
+    last = non_empty[-1]
+    # Ignore obvious code/markup, and overly long paragraphs (a real
+    # awaiting-input prompt is a short closing line, not a wall of text).
+    if last.startswith(("#", "```", "|")) or len(last) > 200:
+        return False
+    # Strong signal: the final line is itself a question.
+    if last.endswith("?"):
+        return True
+    # Imperative / interrogative approval phrase in the final line.
+    if _APPROVAL_RE.search(last):
+        return True
+    # Ambiguous Hungarian verbs only count in explicit question form.
+    if _HU_QUESTION_RE.search(last):
         return True
     return False
 

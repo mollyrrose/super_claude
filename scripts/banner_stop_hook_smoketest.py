@@ -54,6 +54,22 @@ check(not bh.looks_like_awaiting_input(
         "Here is how the regex matches lazily.\nThat is the explanation."),
       "explanatory, no trailing ? -> not awaiting")
 
+# --- Hungarian conditional false positives (the bug this fix targets) ---
+check(not bh.looks_like_awaiting_input(
+        "Ha szeretnéd, később megcsináljuk — de most semmi nem ragad bent, lezárhatod."),
+      "HU conditional 'Ha szeretnéd ... lezárhatod.' -> NOT awaiting")
+check(not bh.looks_like_awaiting_input("Ha minden ok, mehet a deploy."),
+      "HU conditional '...mehet a deploy.' -> NOT awaiting")
+check(not bh.looks_like_awaiting_input("Jóváhagyom a tervet és bezárom."),
+      "HU statement 'Jóváhagyom ...' -> NOT awaiting")
+# --- but the same verbs in explicit question form DO await ---
+check(bh.looks_like_awaiting_input("Tehát: kérsz még valamit, vagy csak bezárod?"),
+      "HU trailing question -> awaiting")
+check(bh.looks_like_awaiting_input("Kész minden. Mehet? Mondd meg."),
+      "HU 'Mehet?' mid-line question form -> awaiting")
+check(bh.looks_like_awaiting_input("Melyik opciót válasszam?"),
+      "HU 'Melyik ...?' -> awaiting")
+
 # --- decide: awaiting + no banner -> block (first time) ---
 state = {}
 action, reason, state = bh.decide("Which way should we go?", "sessA", state)
