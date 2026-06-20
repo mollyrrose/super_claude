@@ -149,6 +149,9 @@ The point of `/qRev` is: deep, multi-lens review of **what THIS session is about
 | `/qRev fast` | uncommitted diff | qMin -> Phase A only, skip Phase B (no agent fleet) |
 | `/qRev branch` | `git diff main..HEAD` files | qMin -> Phase A -> exhaustive 3-pass — for end-of-branch review before merge |
 | `/qRev full` | whole repo (cap ~150 files) | qMin (on uncommitted diff) -> Phase A -> exhaustive 3-pass — for major-release / hostile-takeover audits |
+| `/qRev project` | whole project's useful code, **subsystem by subsystem** (no ~150-file cap) | **Routes to the `qRev-project` skill** (read `~/.claude/skills/qRev-project/SKILL.md`). Context-safe map-reduce: each subsystem reviewed by a delegated subagent fleet in its own context; writes a persistent architecture map (`docs/architecture/`) + an aggregated P0–P3 punch-list (`exclude/SYSTEM_STRATEGIES/qrev-project/`). Accepts `LABEL:path;path, ...` subsystem args, and `fast` / `topic:<name>` to lighten depth. Use for whole-repo onboarding / periodic systematic sweeps. |
+
+`/qRev full` vs `/qRev project`: `full` is a single-context pass capped at ~150 files (fast, can overflow on a big repo); `project` is the map-reduce, no-cap, subsystem-by-subsystem deep sweep for large/monorepo codebases and also emits the durable architecture map. Reach for `project` when the repo is too big for `full` or when you want the persistent map.
 
 If the user combines incompatible args (e.g. `/qRev topic:security branch`), apply both: scope = `branch` files, topic-filter on the agent roster, exhaustive mode. Tell the user one line about how it was interpreted.
 
