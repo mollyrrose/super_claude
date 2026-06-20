@@ -1,0 +1,145 @@
+{
+  "env": {
+    "OPENAI_API_KEY": "[REDACTED — real key only in live ~/.claude/settings.json]",
+    "DEEPSEEK_API_KEY": "[REDACTED — real key only in live ~/.claude/settings.json]",
+    "QREV_CRITIC_PROVIDERS": "claude,openai,deepseek"
+  },
+  "permissions": {
+    "allow": [
+      "Agent(*)",
+      "Bash(*)",
+      "PowerShell(*)",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)",
+      "Glob(*)",
+      "Grep(*)",
+      "ScheduleWakeup(*)",
+      "Skill(*)",
+      "TaskCreate(*)",
+      "TaskUpdate(*)",
+      "TaskList(*)",
+      "Monitor(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "Write(C:\\Users\\[USER]\\.claude\\.qclose_*)",
+      "Edit(C:\\Users\\[USER]\\.claude\\.qclose_*)",
+      "Write(C:\\Users\\[USER]\\.claude\\skills\\hermes-auto-**)",
+      "Edit(C:\\Users\\[USER]\\.claude\\skills\\hermes-auto-**)",
+      "Write(C:\\Users\\[USER]\\.claude\\skills\\hermes-auto-*\\**)",
+      "Edit(C:\\Users\\[USER]\\.claude\\skills\\hermes-auto-*\\**)",
+      "Write(C:/Users/[USER]/.claude/.qclose_*)",
+      "Edit(C:/Users/[USER]/.claude/.qclose_*)",
+      "Write(C:/Users/[USER]/.claude/skills/hermes-auto-**)",
+      "Edit(C:/Users/[USER]/.claude/skills/hermes-auto-**)",
+      "Write(C:/Users/[USER]/.claude/skills/hermes-auto-*/**)",
+      "Edit(C:/Users/[USER]/.claude/skills/hermes-auto-*/**)",
+      "Write(//**/.scratch/qclose_resume_*.md)",
+      "Edit(//**/.scratch/qclose_resume_*.md)",
+      "Write(//c/Users/[USER]/.claude/.qclose_*)",
+      "Edit(//c/Users/[USER]/.claude/.qclose_*)"
+    ],
+    "deny": []
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Python313\\python.exe\" \"D:\\Projects\\super_claude\\hermes-agent\\claude_code_integration\\curator_stop_hook.py\"",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "\"C:\\Python313\\python.exe\" \"C:\\Users\\[USER]\\.claude\\scripts\\banner_stop_hook.py\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Python313\\python.exe\" \"D:\\Projects\\super_claude\\hermes-agent\\claude_code_integration\\curator_precompact_hook.py\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Python313\\python.exe\" \"C:\\Users\\[USER]\\.claude\\scripts\\hook_dispatch.py\" UserPromptSubmit",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Python313\\python.exe\" \"C:\\Users\\[USER]\\.claude\\scripts\\hook_dispatch.py\" PostToolUse",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Python313\\python.exe\" \"C:\\Users\\[USER]\\.claude\\scripts\\rev_learn_sessionend.py\"",
+            "timeout": 8,
+            "async": true
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "node \"C:\\Users\\[USER]\\.claude\\scripts\\statusline_with_weekly.js\"",
+    "padding": 0
+  },
+  "enabledPlugins": {
+    "ecc@ecc": true,
+    "ruflo-core@ruflo": true
+  },
+  "extraKnownMarketplaces": {
+    "superpowers-dev": {
+      "source": {
+        "source": "github",
+        "repo": "obra/superpowers"
+      }
+    },
+    "ecc": {
+      "source": {
+        "source": "github",
+        "repo": "affaan-m/everything-claude-code"
+      }
+    },
+    "ruflo": {
+      "source": {
+        "source": "github",
+        "repo": "ruvnet/ruflo"
+      }
+    }
+  },
+  "autoUpdatesChannel": "latest",
+  "theme": "dark",
+  "autoCompactEnabled": true,
+  "skipAutoPermissionPrompt": true
+}

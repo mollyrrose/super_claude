@@ -22,7 +22,38 @@ rules in `CLAUDE.md`. Editing here changes how every Claude Code session behaves
   `q*` commands (qPlan/qRev/qMin/qClose/qRem/qUpd/qDo/qContent), the vendored
   `arbor-*` engine, `ponytail*`, `improve`, `drawio-skill`, `skillspector-gate`.
 - `~/.claude/tools/skillspector/` — the security scanner (not in this repo).
+- `home_dotclaude/` — sanitized mirror of the live `~/.claude/` config that is
+  worth version-tracking: `CLAUDE.md` and `settings.json`. The live files stay
+  outside the repo; these are copies kept in sync by hand when the config
+  changes.
 - `docs/decisions/log.md` — decision log (ADR-style).
+
+## Username placeholder convention (`[USER]`)
+
+Tracked files must NOT contain the real Windows username. Anywhere a real home
+path appears in a *committed* file, the user segment is written as the literal
+placeholder `[USER]` — i.e. `C:/Users/[USER]/...` (or `C:\Users\[USER]\...`) —
+so the repo is machine-agnostic and the username is never published.
+
+- This applies to docs/skill backups and the `home_dotclaude/` mirror, e.g.
+  `home_dotclaude/settings.json`, `hermes-agent/claude_skills_backup/*/SKILL.md`.
+- The LIVE files under `~/.claude/` keep the REAL path — never sanitize those,
+  or the hooks/scripts that run from absolute paths break. Sanitization is a
+  repo-only transform applied when mirroring/committing.
+- When copying a live config or script into the repo, replace the real Windows
+  user-name segment (whatever `C:\Users\<name>\` resolves to on the authoring
+  machine) with `[USER]` before committing. A consumer on another machine
+  substitutes their own username back in. (This doc deliberately does not spell
+  out the real name — that would re-leak it.)
+- Note: other machine-specific roots that are NOT the username (e.g.
+  `C:\Python313`, `D:\projects\super_claude`) are left as-is — only the user
+  segment is placeholdered.
+- SECRETS: the live `settings.json` carries real API keys in `env`
+  (`OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, and any future provider key). The
+  mirror MUST redact every key value to `[REDACTED — ...]` before committing.
+  GitHub push-protection will (correctly) block a push that contains a real
+  key, so redacting is mandatory, not optional. When re-syncing the mirror,
+  re-run the redaction every time.
 
 ## How to run / test
 

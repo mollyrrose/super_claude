@@ -26,7 +26,7 @@ recorded as scanned in `~/.claude/.skillspector_log.jsonl`.
 ## How to run
 
 ```powershell
-$ss = "C:\Users\Seal Josephson\.claude\tools\skillspector\.venv\Scripts\skillspector.exe"
+$ss = "C:\Users\[USER]\.claude\tools\skillspector\.venv\Scripts\skillspector.exe"
 # URL form (preferred — scans WITHOUT adding it to your tree):
 & $ss scan "<git-url>" --no-llm --format json -o "<repo-root>\.scratch\scans\<name>.json"
 # local form (already-downloaded code, e.g. retro-scan):
