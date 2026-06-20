@@ -33,8 +33,8 @@ Skip if the session was purely conversational with no code changes, no plans, no
 
 Before doing anything else, check `~/.claude/.qclose_index.jsonl` for collisions:
 
-1. If the index file doesn't exist, create an empty one (`touch` equivalent). Continue.
-2. Read the last 10 lines. Each line is one prior `/qClose` event.
+1. If the index file doesn't exist, create an empty one with the **Write tool** (write an empty string to the path) — NOT a Bash `touch` / `New-Item`. See Step 5 for why Bash must not touch `~/.claude/`. Continue.
+2. Read the last 10 lines (use the Read tool). Each line is one prior `/qClose` event.
 3. For each recent entry, check: same `project_root` AND same `branch` AND `hb_ts` within the last 30 minutes?
 4. If yes, surface to the user:
    ```
@@ -291,7 +291,25 @@ Append ONE line to `~/.claude/.qclose_index.jsonl`:
 
 This is the perzistens link the closer's conversational memory cannot lose. Any other window can grep this file to answer "did I write this resume? when? where?".
 
-Never rewrite or truncate the index — append-only. Rotation, if ever needed, is a separate user-driven task.
+**Append with the Write tool, NEVER with Bash.** This is the difference between a
+silent close and one that prompts on every run. Claude Code's built-in guard for
+paths under `~/.claude/` is bypassed ONLY by the explicit
+`Write(...\.qclose_*)` / `Edit(...\.qclose_*)` allowlist patterns that the
+installer registers (`install_into_claude_code.py:_qclose_permission_patterns`);
+a `Bash(*)` allow does NOT cover it, so any `printf >> ~/.claude/...`,
+`echo >>`, heredoc, or `Add-Content` to the index trips the "sensitive file"
+permission prompt every single close. To append via the Write tool:
+
+1. Read the current index with the Read tool (it exists — Step 0 created it).
+2. Write the file back with the existing content plus the new JSON line (and a
+   trailing newline) appended. The index is small and infrequently written, so a
+   read-then-rewrite is cheap and stays inside the pre-authorized Write path.
+
+The same rule applies to the resume `.md` and any other `~/.claude/` write in
+this skill: use Write/Edit, never a Bash redirect.
+
+Never rewrite or truncate the index's existing lines — the rewrite in step 2 only
+ADDS a line. Append-only. Rotation, if ever needed, is a separate user-driven task.
 
 ### Step 6 — Commit + push
 
@@ -358,7 +376,7 @@ Format rules — get them exactly right, the user inspects this block:
 | Push fails (network, auth, no upstream) | Commit stays local; closeout shows `push: failed — <reason>` |
 | Push always requires explicit user yes | The default is ASK, never auto-push. Applies to every repo without exception. |
 | `project_root == ~/.claude` | Write to `~/.claude/.qclose_resume_<sessid6>.md` (not `~/.claude/.scratch/`) per CLAUDE.md "Not for this directory" |
-| `~/.claude/.qclose_index.jsonl` doesn't exist | Create it (empty), then append. Don't ask, don't warn — it's expected on first-ever /qClose. |
+| `~/.claude/.qclose_index.jsonl` doesn't exist | Create it (empty) with the Write tool, then append (Read + Write). Never Bash. Don't ask, don't warn — it's expected on first-ever /qClose. |
 | Index says another window closed same branch <30 min ago | Step 0 surfaces, default-stops on no-response |
 | User has no TODO files at all | Omit the "Open TODO entries" section entirely |
 | No plan files in `~/.claude/plans/` touched in 24h | Omit the "Open plan files" section |
