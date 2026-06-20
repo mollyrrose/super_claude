@@ -201,6 +201,22 @@ List every file written under `docs/architecture/` and
 aggregate verdict and the P0 count, and remind the user to re-run `/qRev project`
 after significant structural changes.
 
+## Runs on GLM too
+
+This skill works identically when the session runs on GLM (z.ai) instead of
+Anthropic — it is a markdown skill executed by whatever model is active, and its
+delegated subagents go through the Task tool, which inherits the active provider
+(per the global `~/.claude/CLAUDE.md` "GLM (z.ai)" + "q* commands under GLM"
+rules). So under the GLM launcher every subsystem fleet runs on GLM, and any tier
+a sub-agent delegates to resolves to a GLM model via the per-tier mapping. No
+special-casing is needed. One caveat carried from that GLM section: GLM is weaker
+than Anthropic Opus at the hardest architecture/audit judgment, so for a
+high-stakes whole-repo audit, prefer running this on the Claude subscription —
+or, if you want a real Claude voice while on GLM during the planning of fixes,
+note that `/qPlan` (which the fix-planning in section 6 uses) carries the
+`claude-direct` cross-model lens that reaches the Claude subscription via
+`claude -p` even on GLM.
+
 ## Do not
 
 - Do not load the whole repo into one context (the hard rule).

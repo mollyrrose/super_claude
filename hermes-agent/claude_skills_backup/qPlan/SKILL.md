@@ -85,7 +85,10 @@ panel_lenses:                  # max-mode default — all 22 lenses on
   - spike                      # hermes-spike
   - decomposition              # oc-to-issues
   - socratic                   # socratic-mentor (questions, not assertions)
-  - openai                     # cross-model voice via openai_critic.py
+  - openai                     # cross-model voice via openai_critic.py (OPENAI_API_KEY)
+  - deepseek                   # cross-model voice via deepseek_critic.py (DEEPSEEK_API_KEY)
+  - subq                       # FULL-CONTEXT voice via subq_critic.py (SUBQ_API_KEY) — ~1M/12M ctx, feed it large context
+  - claude-direct              # TRUE Claude voice via claude_critic.py — independent of session provider; the real-Claude lens when running on GLM
   # ----- 7 research-derived lenses (2024-2026 multi-agent planning research) -----
   - spec-conformance           # MAST: drift vs original ask (21% of multi-agent failures)
   - executable-check           # LLM-Modulo: cheapest thing actually runnable
@@ -115,6 +118,52 @@ critic_prefix:  "Erről mit gondolsz? Hol javítanád?:"
 `OPENAI_API_KEY`. The script fails loud if the key is missing — it does NOT
 silently fall back to `claude`, because the whole point of provider
 comparison is to keep them distinguishable.
+
+### Cross-model lenses are opt-in — mute, don't fail, when a key/backend is missing
+
+Each cross-model lens has its own provider script and credential. A lens whose
+credential/backend is unavailable is **silently muted** from the panel for that
+run (it does NOT fail the round — same spirit as `/qRev`'s multi-provider policy).
+The roster of external voices:
+
+| Lens | Script | Needs | Notes |
+|---|---|---|---|
+| `openai` | `scripts/openai_critic.py` | `OPENAI_API_KEY` | auto-picks highest gpt-5.x / o-series |
+| `deepseek` | `scripts/deepseek_critic.py` | `DEEPSEEK_API_KEY` | auto-picks highest DeepSeek |
+| `subq` | `scripts/subq_critic.py` | `SUBQ_API_KEY` | OpenAI-compatible (`https://api.subq.ai/v1`, model `subq-preview`). **Full-context lens** — ~1M (12M gated). Feed it MORE context than other models can hold: whole files, large reference docs, prior rounds. "Use the huge budget cleverly" = route the big-context judgment here. Override base/model via `SUBQ_BASE_URL` / `SUBQ_MODEL`. |
+| `claude-direct` | `scripts/claude_critic.py` | `ANTHROPIC_API_KEY` **or** the `claude` CLI | TRUE Claude voice, independent of the session provider. Backend auto-select: `api` if `ANTHROPIC_API_KEY` set, else `cli` = shells out to `claude -p` with the GLM env stripped, using the Claude **subscription**. Force with `CLAUDE_CRITIC_BACKEND=api|cli`. |
+
+### GLM-awareness — get a real Claude voice even while running on GLM
+
+When the session runs on GLM (z.ai) — launched via `claude-glm.ps1`, detectable
+because `ANTHROPIC_BASE_URL` points at z.ai / bigmodel, `ZAI_API_KEY` is set, or
+the active model id is a GLM id — the built-in `claude` lens ("current session")
+is actually **GLM**, not Claude. So on GLM, qPlan must reason with EVERY available
+model rather than letting the GLM session stand in for Claude:
+
+1. The `claude` lens = the GLM session voice (keep it; it is the running model).
+2. ADD the `claude-direct` lens so a genuine highest-Claude-model voice is in the
+   panel. With no `ANTHROPIC_API_KEY`, `claude_critic.py` uses the `cli` backend:
+   it spawns `claude -p` with the GLM overrides stripped, so that subprocess runs
+   on the Claude **subscription** (the "use my Claude subscription while running
+   in Claude Code on GLM" path the user asked for).
+3. Keep `openai`, `deepseek`, and `subq` lenses on (whichever keys exist).
+
+Net effect on GLM: qPlan's decisions are cross-checked against GLM (session) +
+real Claude (subscription via `claude -p`) + OpenAI + DeepSeek + SubQ
+(full-context) — every AI tool that is reachable. On Anthropic (normal launch)
+the `claude` lens already IS the real Claude, so `claude-direct` is redundant and
+may be dropped unless you explicitly want a second, differently-prompted Claude
+pass. This GLM-awareness applies transitively to `/qGoal`, which calls qPlan for
+its decisions.
+
+Caveats (state them honestly, do not over-promise): the `cli` subscription path
+assumes `claude -p` headless mode is available (Claude Code >= 2.x) and that
+stripping the GLM env restores the subscription auth — if that subprocess fails
+for any reason, the lens is muted (never blocks the round). The SubQ 12M tier is
+gated to research/enterprise; `subq-preview` (~1M) is the default. Kill switches:
+unset the relevant key, drop the lens from `panel_lenses`, or
+`CLAUDE_CRITIC_BACKEND` / `SUBQ_MODEL` overrides.
 
 **Model auto-discovery.** When no `model:` is set in the config block, the
 OpenAI critic queries `GET /v1/models` once per 24 h and picks the highest-
