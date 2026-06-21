@@ -141,15 +141,21 @@ messages.
 
 When a reply ends with a question, a choice, or any other prompt that
 expects me to type something back, the LAST line of the message MUST be
-the ASCII attention banner below — exactly this glyph and exactly this
-spelling — so I notice the terminal is idle waiting for me instead of
-just scrolling past:
+the attention banner below — exactly this text — so I notice the terminal
+is idle waiting for me instead of just scrolling past. As of 2026-06-21 the
+banner uses green-dot emoji (🟢, U+1F7E2) for visual pop; this is a
+DELIBERATE, explicitly-approved exception to the "No decorative unicode"
+rule (it is a user-facing attention signal, not code / tool input). Emit it
+on its own line and NOT inside a code fence — a fence renders the dots
+monochrome and the old all-asterisk box rendered as a markdown horizontal
+rule (the asterisk rows vanished); outside a fence the green dots show in
+color and the line is not reinterpreted:
 
-```
-*********************************
-*    USER INPUT REQUIRED        *
-*********************************
-```
+🟢🟢🟢 USER INPUT REQUIRED 🟢🟢🟢
+
+The ASCII text `USER INPUT REQUIRED` MUST stay verbatim inside it — the
+Stop-hook backstop (`banner_stop_hook.py`) detects the banner by that
+substring, so the green dots are cosmetic and never load-bearing.
 
 Applies to:
 - Direct questions ("Mit szeretnél?", "Yes/No?", "Which option?")
@@ -564,7 +570,7 @@ Use ASCII equivalents:
 - bullets: `-` or `*`
 - info: `[i]` or `note:`
 
-This rule does NOT apply to **functional** unicode in user-facing display — e.g. the statusline progress-bar glyphs (`U+2588 U+2591`) and the pace arrows (`U+25B2 U+25BC`) are deliberate UI, not decoration, and stay. The em-dash (`—`, U+2014) is fine in prose because plain `--` is ambiguous with CLI flag syntax. The question is "does it convey something a plain-text reader needs?" — if yes, keep; if it's just visual flair, use ASCII.
+This rule does NOT apply to **functional** unicode in user-facing display — e.g. the statusline progress-bar glyphs (`U+2588 U+2591`) and the pace arrows (`U+25B2 U+25BC`) are deliberate UI, and the `USER INPUT REQUIRED` banner's green-dot emoji (`🟢`, U+1F7E2, approved 2026-06-21) is a deliberate user-facing attention signal — these are not decoration, and stay. The em-dash (`—`, U+2014) is fine in prose because plain `--` is ambiguous with CLI flag syntax. The question is "does it convey something a plain-text reader needs?" — if yes, keep; if it's just visual flair, use ASCII.
 
 Even when filtering output that contains these glyphs (e.g. `grep` over a `node:test` reporter stream that emits check variants `✓ ✔ ✅ ☑ 🗸 🗹` (U+2713 / U+2714 / U+2705 / U+2611 / U+1F5F8 / U+1F5F9), X variants `✕ ✖ ✗ ✘ ❌ ❎ ☒ 🗙 🗴 🗵 🗷` (U+2715 / U+2716 / U+2717 / U+2718 / U+274C / U+274E / U+2612 / U+1F5D9 / U+1F5F4 / U+1F5F5 / U+1F5F7), or info-source variants `ℹ 🛈` (U+2139 / U+1F6C8)), write the filter using ASCII keywords like `fail|error|pass` — **never quote the glyph itself** in a pattern. The reporter also emits ASCII status words alongside the glyphs (`fail 0`, `pass 12`); match those.
 
