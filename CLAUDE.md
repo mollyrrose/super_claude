@@ -62,6 +62,7 @@ ASCII equivalents:
 
 Exceptions that ARE allowed because they're functional, not decorative:
 - statusline progress-bar glyphs `U+2588 U+2591` and pace arrows `U+25B2 U+25BC` in `scripts/statusline_with_weekly.js` (installed to `~/.claude/scripts/statusline_with_weekly.js`) — that's a UI surface, the chars carry visual state with no plain-text substitute.
+- the `USER INPUT REQUIRED` banner's green-dot emoji (`🟢`, U+1F7E2), approved 2026-06-21 — a user-facing attention signal emitted as `🟢🟢🟢 USER INPUT REQUIRED 🟢🟢🟢` on its own line (NOT fenced) so the idle terminal is noticed in color. The ASCII text `USER INPUT REQUIRED` stays verbatim inside it — `banner_stop_hook.py` detects the banner by that substring, so the dots are cosmetic, never load-bearing. (The old all-asterisk box was dropped because a line of `*` renders as a markdown horizontal rule, making the rows vanish.)
 - em-dash `U+2014` in prose, because plain `--` collides with CLI flag syntax.
 
 When in doubt: if removing the character wouldn't reduce the meaning a plain-text reader picks up, the character is decoration and shouldn't be there.
