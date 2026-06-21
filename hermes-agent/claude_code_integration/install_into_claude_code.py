@@ -16,13 +16,14 @@ Four steps, each independently skippable:
    Both hooks do zero LLM work. Cost: $0. The actual analysis is done
    by Claude itself when the user runs ``/hermes-curate``.
 
-3b. **Permission allowlist** -- pre-authorizes /qClose and hermes-learn
-   writes inside ~/.claude/ so the user doesn't see the recurring
-   "allow Claude to edit its own settings" prompt every close. The
-   patterns added are scoped to .qclose_*.* files and
-   skills/hermes-auto-** (both backslash + forward-slash variants).
-   Gated on the same --skip-hooks flag because both manipulate
-   settings.json.
+3b. **Permission allowlist** -- registers best-effort hermes-auto skill
+   write patterns. NOTE: the ~/.claude/ config-dir guard is NOT bypassable
+   by the allowlist (verified: Edit(*) + explicit .qclose_* variants still
+   prompted), so qClose's index was relocated to ~/.qclose/index.jsonl
+   (covered silently by the plain Write(*) allow). Only hermes-auto skills,
+   which MUST live under ~/.claude/skills/, still get (aspirational)
+   patterns here. Gated on the same --skip-hooks flag because it
+   manipulates settings.json.
 
 4. **Optional API keys** -- interactive prompt for OPENAI_API_KEY and
    DEEPSEEK_API_KEY, stored in ~/.claude/settings.json's ``env`` block
@@ -365,20 +366,24 @@ def register_hooks(dry_run: bool) -> bool:
 
 
 def _qclose_permission_patterns() -> list[str]:
-    """Pre-authorize /qClose + hermes-learn writes inside ~/.claude/.
+    """Best-effort allowlist patterns for hermes-learn auto-skill writes.
 
-    Claude Code's built-in guard prompts the user with "Yes, and allow
-    Claude to edit its own settings for this session" whenever Write /
-    Edit targets a path under the Claude config dir (~/.claude/). For
-    /qClose this fires every single close (writing .qclose_index.jsonl
-    and .qclose_resume_<sessid6>.md), and for hermes-learn it fires every
-    time an auto-skill is captured. Both are intentional behaviours the
-    user has already approved at the workflow level.
+    THE ~/.claude/ GUARD IS NOT BYPASSABLE BY THE ALLOWLIST. Claude Code prompts
+    ("Yes, and allow Claude to edit its own settings for this session") on EVERY
+    Write/Edit under the config dir ~/.claude/, and no permission allow entry
+    suppresses it -- verified on MSI, where a broad Edit(*)/Write(*) PLUS six
+    explicit Edit(~/.claude/.qclose_*) variants were all present and /qClose
+    STILL prompted on the index write every run (same-session proof: a .scratch/
+    write was silent while the ~/.claude/ write prompted).
 
-    Returns Write/Edit allowlist patterns for the two known qClose paths
-    AND the hermes-learn auto-skill output dir. Both backslash and
-    forward-slash variants are emitted so the matcher hits regardless of
-    how the path is normalized at call time.
+    Consequence: qClose's durable index was RELOCATED out of ~/.claude/ to
+    ~/.qclose/index.jsonl, which the plain Write(*) allow covers silently. qClose
+    therefore needs NO pattern here. The hermes-auto patterns below remain only
+    because those skills MUST live under ~/.claude/skills/ and cannot be moved;
+    they are aspirational (may still prompt) until Claude Code honors them.
+
+    Both backslash and forward-slash variants are emitted so the matcher hits
+    regardless of how the path is normalized at call time.
     """
     home = Path.home() / ".claude"
     home_bs = str(home)
@@ -386,24 +391,22 @@ def _qclose_permission_patterns() -> list[str]:
 
     patterns: list[str] = []
     for prefix, sep in ((home_bs, "\\"), (home_fs, "/")):
-        # qClose state files: .qclose_index.jsonl, .qclose_resume_*.md
-        patterns.append(f"Write({prefix}{sep}.qclose_*)")
-        patterns.append(f"Edit({prefix}{sep}.qclose_*)")
-        # hermes-learn auto-captured skills
+        # hermes-learn auto-captured skills (must live under ~/.claude/skills/)
         patterns.append(f"Write({prefix}{sep}skills{sep}hermes-auto-**)")
         patterns.append(f"Edit({prefix}{sep}skills{sep}hermes-auto-**)")
     return patterns
 
 
 def register_permissions(dry_run: bool) -> bool:
-    """Step 3b -- ensure permissions.allow contains the qClose +
-    hermes-learn path patterns so the user never sees the "allow Claude
-    to edit its own settings" prompt during a /qClose run.
+    """Step 3b -- ensure permissions.allow contains the hermes-auto skill
+    write patterns (best-effort; see _qclose_permission_patterns).
 
-    Idempotent: patterns already present are skipped. Patterns are stored
-    in addition to the broader Write(*) / Edit(*) wildcards because the
-    built-in guard for ~/.claude/ paths is not bypassed by wildcards
-    alone -- explicit path-prefixed entries are needed.
+    qClose no longer needs a pattern here: its durable index was relocated to
+    ~/.qclose/index.jsonl, OUTSIDE the ~/.claude/ config-dir guard, so the plain
+    Write(*) allow covers it silently. The ~/.claude/ guard is NOT bypassable by
+    any allowlist entry, so the hermes-auto patterns are aspirational only.
+
+    Idempotent: patterns already present are skipped.
     """
     settings = load_settings()
     perms = settings.setdefault("permissions", {})
