@@ -143,19 +143,25 @@ When a reply ends with a question, a choice, or any other prompt that
 expects me to type something back, the LAST line of the message MUST be
 the attention banner below — exactly this text — so I notice the terminal
 is idle waiting for me instead of just scrolling past. As of 2026-06-21 the
-banner uses green-dot emoji (🟢, U+1F7E2) for visual pop; this is a
-DELIBERATE, explicitly-approved exception to the "No decorative unicode"
-rule (it is a user-facing attention signal, not code / tool input). Emit it
-on its own line and NOT inside a code fence — a fence renders the dots
-monochrome and the old all-asterisk box rendered as a markdown horizontal
-rule (the asterisk rows vanished); outside a fence the green dots show in
-color and the line is not reinterpreted:
+banner is a green-dot line (🟢, U+1F7E2) framed by asterisk rows, and it
+MUST be emitted INSIDE a fenced code block (triple backticks). The fence is
+load-bearing: a bare line of only asterisks renders as a markdown horizontal
+rule (the asterisk rows vanish — the original bug), but inside a fence
+markdown shows every character literally. The green-dot emoji is a
+DELIBERATE, explicitly-approved exception to the "No decorative unicode" rule
+(it is a user-facing attention signal, not code / tool input). Emit it
+exactly as below (the asterisk rows are ~33 wide to match the green line,
+since each dot is double-width):
 
+```
+*********************************
 🟢🟢🟢 USER INPUT REQUIRED 🟢🟢🟢
+*********************************
+```
 
 The ASCII text `USER INPUT REQUIRED` MUST stay verbatim inside it — the
 Stop-hook backstop (`banner_stop_hook.py`) detects the banner by that
-substring, so the green dots are cosmetic and never load-bearing.
+substring, so the asterisks and green dots are cosmetic, never load-bearing.
 
 Applies to:
 - Direct questions ("Mit szeretnél?", "Yes/No?", "Which option?")

@@ -211,8 +211,12 @@ def decide(text: str, session_id: str, state: dict, banner=None):
         "plain-language (17-year-old-logic) restatement of the question. Per "
         "~/.claude/CLAUDE.md ('User input visibility' + 'Plain-language questions'), "
         "append both now: first the simplified-logic summary of what you are asking, "
-        "then the banner exactly as (on its own line, NOT inside a code fence):\n"
-        "\U0001F7E2\U0001F7E2\U0001F7E2 USER INPUT REQUIRED \U0001F7E2\U0001F7E2\U0001F7E2"
+        "then the banner exactly as (INSIDE a fenced code block):\n"
+        "```\n"
+        "*********************************\n"
+        "\U0001F7E2\U0001F7E2\U0001F7E2 USER INPUT REQUIRED \U0001F7E2\U0001F7E2\U0001F7E2\n"
+        "*********************************\n"
+        "```"
     )
     return "block", reason, new_state
 
