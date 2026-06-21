@@ -131,3 +131,36 @@ Super_claude-specific notes:
 - `D:\projects\super_claude\hermes-agent\claude_code_integration\ruvector.db` and the top-level `ruvector.db` — embeddings / skill state.
 
 All of the above are listed in `.gitignore` and must stay there.
+
+## Load-aware retry runner (hang-prone shell commands)
+
+`scripts/load_retry_runner.py` (installed to `~/.claude/scripts/`, smoketest
+`load_retry_runner_smoketest.py`) wraps ONE shell command with three guards:
+
+1. a system-load gate -- hold the launch while total CPU% >= cap (default 92) or
+   free RAM < floor (default 2 GB), reading psutil or a CIM/`/proc` fallback, and
+   surveying other `claude`/`pwsh`/`powershell`/`node` windows for context;
+2. a hard per-attempt timeout that kills the whole process tree (`taskkill /T`),
+   so a wedged command never hangs forever;
+3. variable/jittered backoff retry until the command succeeds or the
+   attempt/overall-deadline budget runs out.
+
+Usage:
+
+```
+python ~/.claude/scripts/load_retry_runner.py --probe                      # one load snapshot + window survey
+python ~/.claude/scripts/load_retry_runner.py --timeout 15 -- git fetch    # gated + retried
+python ~/.claude/scripts/load_retry_runner.py --json --quiet -- <command>  # machine-readable
+```
+
+SCOPE + HARD LIMIT (state this honestly, do not over-promise): it protects shell
+COMMANDS it launches and MONITORS other windows' load, but it CANNOT route or
+revive *harness tool calls* (Agent / Skill / Read / Edit / MCP) -- those are not
+shell commands and nothing can interpose a wrapper on them. A frozen interactive
+Claude window cannot be resumed from outside (the same wall `window_watchdog.py`
+documents). To identify WHICH tool froze across ALL tool types, read the session
+transcript's last `tool_use` that has no matching `tool_result` -- that data
+already exists per call, so no per-tool hook is needed.
+
+Kill switch: `LOAD_RETRY_DISABLE=1` (pass-through single run, no gate/retry), or
+just don't call it. No daemon, no hook -- nothing persists when it exits.
