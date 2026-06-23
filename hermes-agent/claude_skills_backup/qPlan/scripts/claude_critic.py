@@ -20,6 +20,13 @@ Two backends, auto-selected:
     default Anthropic endpoint + subscription). This is the "use my Claude
     subscription while running on GLM" path. Force with CLAUDE_CRITIC_BACKEND=cli.
 
+CLI model fallback: the cli backend tries a model chain highest-first
+(opus -> sonnet -> haiku) and uses the first the subscription actually serves.
+A $20/Pro plan may block or exhaust Opus, in which case `claude -p --model opus`
+fails; rather than muting the whole lens we fall back to the next model so a
+genuine Claude voice still reaches the panel. Override the chain head with the
+per-call `model` field or CLAUDE_CRITIC_CLI_MODEL env; the rest stays as fallback.
+
 Reads JSON from stdin:  { "task","plan","ledger","model"? }
 Writes JSON to stdout:  { "verdict","suggestions","provider":"claude-direct","model" }
 
@@ -67,6 +74,13 @@ MODEL_PRIORITY = [
     re.compile(r"^claude-3-5-haiku(?:.*)?$"),
 ]
 HARD_FALLBACK_API_MODEL = "claude-sonnet-4-5"
+# CLI (subscription) backend model chain, highest-first. A $20/Pro subscription
+# may block or exhaust Opus, so `claude -p --model opus` can fail; rather than
+# muting the claude-direct lens we retry down this chain and use the highest model
+# the subscription actually serves. Head defaults to opus ("always reach for
+# Opus"); override the head with CLAUDE_CRITIC_CLI_MODEL or the per-call `model`
+# field, and the remaining entries stay as graceful fallback.
+CLI_MODEL_CHAIN = ["opus", "sonnet", "haiku"]
 # GLM launcher env overrides to strip so `claude -p` reaches Anthropic + the
 # subscription instead of z.ai.
 _GLM_ENV_KEYS = (
@@ -95,6 +109,21 @@ def sanitized_env(env: dict) -> dict:
     for k in _GLM_ENV_KEYS:
         out.pop(k, None)
     return out
+
+
+def cli_model_chain(override=None) -> list:
+    """Ordered list of CLI model aliases to try. The requested model (per-call
+    `model` override, else CLAUDE_CRITIC_CLI_MODEL env, else the chain head) goes
+    first; the remaining CLI_MODEL_CHAIN entries follow as graceful fallbacks, so
+    the lens is never muted just because the top model is unavailable on the
+    active plan. Deduplicated, order preserved."""
+    head = override or os.environ.get("CLAUDE_CRITIC_CLI_MODEL")
+    ordered = ([head] if head else []) + list(CLI_MODEL_CHAIN)
+    chain = []
+    for m in ordered:
+        if m and m not in chain:
+            chain.append(m)
+    return chain
 
 
 def extract_json(text: str) -> dict:
@@ -210,36 +239,45 @@ def call_api(api_key: str, model: str, prompt: str) -> dict:
 
 # --- CLI (subscription) backend -------------------------------------------
 
-def call_cli(model_alias: str, prompt: str) -> dict:
+def call_cli(model_chain, prompt: str):
+    """Try each alias in model_chain via `claude -p` until one succeeds. Returns
+    (verdict_dict, model_alias_used). Exits 2 only if EVERY model in the chain
+    fails (the panel then mutes the lens)."""
     claude_bin = shutil.which("claude")
     if not claude_bin:
         sys.stderr.write("claude_critic[cli]: `claude` CLI not found on PATH.\n")
         sys.exit(2)
-    args = [claude_bin, "-p", "--output-format", "json", "--model", model_alias]
     env = sanitized_env(os.environ)
-    try:
-        proc = subprocess.run(
-            args, input=prompt, capture_output=True, text=True,
-            env=env, timeout=240,
-        )
-    except subprocess.TimeoutExpired:
-        sys.stderr.write("claude_critic[cli]: `claude -p` timed out.\n")
-        sys.exit(2)
-    if proc.returncode != 0:
-        sys.stderr.write(f"claude_critic[cli]: `claude -p` exit {proc.returncode}: {proc.stderr[:800]}\n")
-        sys.exit(2)
-    # --output-format json wraps the answer; the critic JSON is inside `result`.
-    raw = proc.stdout.strip()
-    try:
-        envelope = json.loads(raw)
-        inner = envelope.get("result", raw) if isinstance(envelope, dict) else raw
-    except json.JSONDecodeError:
-        inner = raw
-    try:
-        return extract_json(inner if isinstance(inner, str) else json.dumps(inner))
-    except ValueError as e:
-        sys.stderr.write(f"claude_critic[cli]: could not parse verdict JSON ({e}). Raw: {raw[:800]}\n")
-        sys.exit(2)
+    errors = []
+    for model_alias in model_chain:
+        args = [claude_bin, "-p", "--output-format", "json", "--model", model_alias]
+        try:
+            proc = subprocess.run(
+                args, input=prompt, capture_output=True, text=True,
+                env=env, timeout=240,
+            )
+        except subprocess.TimeoutExpired:
+            errors.append(f"{model_alias}: timed out")
+            continue
+        if proc.returncode != 0:
+            errors.append(f"{model_alias}: exit {proc.returncode}: {proc.stderr.strip()[:200]}")
+            continue
+        # --output-format json wraps the answer; the critic JSON is inside `result`.
+        raw = proc.stdout.strip()
+        try:
+            envelope = json.loads(raw)
+            inner = envelope.get("result", raw) if isinstance(envelope, dict) else raw
+        except json.JSONDecodeError:
+            inner = raw
+        try:
+            verdict = extract_json(inner if isinstance(inner, str) else json.dumps(inner))
+        except ValueError as e:
+            errors.append(f"{model_alias}: unparseable verdict ({e})")
+            continue
+        return verdict, model_alias
+    sys.stderr.write(
+        "claude_critic[cli]: all CLI models failed -> " + " | ".join(errors) + "\n")
+    sys.exit(2)
 
 
 def main() -> None:
@@ -267,9 +305,8 @@ def main() -> None:
         verdict = call_api(api_key, model, prompt)
         model_used = model
     else:  # cli / subscription
-        model_alias = override or "opus"
-        verdict = call_cli(model_alias, prompt)
-        model_used = f"subscription:{model_alias}"
+        verdict, alias_used = call_cli(cli_model_chain(override), prompt)
+        model_used = f"subscription:{alias_used}"
 
     verdict["provider"] = "claude-direct"
     verdict["model"] = model_used

@@ -88,7 +88,10 @@ panel_lenses:                  # max-mode default — all 22 lenses on
   - openai                     # cross-model voice via openai_critic.py (OPENAI_API_KEY)
   - deepseek                   # cross-model voice via deepseek_critic.py (DEEPSEEK_API_KEY)
   - subq                       # FULL-CONTEXT voice via subq_critic.py (SUBQ_API_KEY) — ~1M/12M ctx, feed it large context
+  - subq-free                  # same subq_critic.py, free tier (tier:free) — the no-key/free-endpoint full-context voice
   - claude-direct              # TRUE Claude voice via claude_critic.py — independent of session provider; the real-Claude lens when running on GLM
+  - glm                        # TRUE GLM voice via glm_critic.py (GLM_API_KEY/ZAI_API_KEY) — paid flagship; the real-GLM lens when running on Claude
+  - glm-free                   # same glm_critic.py, free tier (model: glm-4-flash) — a free GLM voice alongside the paid one
   # ----- 7 research-derived lenses (2024-2026 multi-agent planning research) -----
   - spec-conformance           # MAST: drift vs original ask (21% of multi-agent failures)
   - executable-check           # LLM-Modulo: cheapest thing actually runnable
@@ -97,10 +100,25 @@ panel_lenses:                  # max-mode default — all 22 lenses on
   - drift-anchor               # Counter multi-round debate drift (round-3+ only)
   - pareto-variants            # GEPA: variants on different axes (Phase A only)
   - bias-audit                 # Audit ledger for momentum / suggester-preference (round-4+ only)
-panel_parallel: true           # fire lenses in parallel via Agent tool
+panel_parallel: true           # fire the INTERNAL (Claude-side) lenses in parallel via Agent tool
 panel_min_lenses: 7            # below this after mute heuristics → config error
 panel_bias_injections: true    # CoVe + negative-constraint + "could you be wrong"
                                # applied to every lens prompt by the orchestrator
+provider_relay: true           # cross-model AI voices critique SEQUENTIALLY, not all at once:
+                               # send the plan to ONE AI, apply its fixes, pass the IMPROVED
+                               # plan to the NEXT AI, around the circle until it comes back
+                               # (see "Provider relay mode"). false = every voice sees the same
+                               # plan version (legacy parallel merge). Independent of
+                               # panel_parallel, which still governs the internal Claude lenses.
+relay_order:                   # order the provider voices take their turn (active + available only;
+                               # the orchestrator dedups so each provider appears once per lap)
+  - claude-direct              # the real Claude voice (or the session `claude` lens on Anthropic)
+  - openai
+  - deepseek
+  - glm                        # paid GLM (or the session `claude`=GLM voice when running on GLM)
+  - glm-free
+  - subq
+  - subq-free                  # free SubQ voice (tier:free) — joins the circle when configured/keyless
 openai_backend: api            # api | browser (browser is a stub in v1)
 model: <provider default>      # claude: current session
                                # openai: auto-pick best /v1/models entry
@@ -131,7 +149,10 @@ The roster of external voices:
 | `openai` | `scripts/openai_critic.py` | `OPENAI_API_KEY` | auto-picks highest gpt-5.x / o-series |
 | `deepseek` | `scripts/deepseek_critic.py` | `DEEPSEEK_API_KEY` | auto-picks highest DeepSeek |
 | `subq` | `scripts/subq_critic.py` | `SUBQ_API_KEY` | OpenAI-compatible (`https://api.subq.ai/v1`, model `subq-preview`). **Full-context lens** — ~1M (12M gated). Feed it MORE context than other models can hold: whole files, large reference docs, prior rounds. "Use the huge budget cleverly" = route the big-context judgment here. Override base/model via `SUBQ_BASE_URL` / `SUBQ_MODEL`. |
-| `claude-direct` | `scripts/claude_critic.py` | `ANTHROPIC_API_KEY` **or** the `claude` CLI | TRUE Claude voice, independent of the session provider. Backend auto-select: `api` if `ANTHROPIC_API_KEY` set, else `cli` = shells out to `claude -p` with the GLM env stripped, using the Claude **subscription**. Force with `CLAUDE_CRITIC_BACKEND=api|cli`. |
+| `subq-free` | `scripts/subq_critic.py` | `SUBQ_FREE_API_KEY` **or** `SUBQ_FREE_BASE_URL` | Same script, **free** tier for the no-paid-key case: call with `tier: "free"`. Sends WITHOUT an `Authorization` header when keyless, so it lights up the moment SubQ offers a free key or a keyless free endpoint. Honest limit: SubQ has no known keyless free tier today, so `subq-free` mutes until `SUBQ_FREE_API_KEY` or `SUBQ_FREE_BASE_URL` (+ optional `SUBQ_FREE_MODEL`) is set. |
+| `claude-direct` | `scripts/claude_critic.py` | `ANTHROPIC_API_KEY` **or** the `claude` CLI | TRUE Claude voice, independent of the session provider. Backend auto-select: `api` if `ANTHROPIC_API_KEY` set, else `cli` = shells out to `claude -p` with the GLM env stripped, using the Claude **subscription**. CLI model chain opus->sonnet->haiku (graceful fallback so a $20/Pro plan that lacks Opus still yields a Claude voice); override the head with `CLAUDE_CRITIC_CLI_MODEL` or per-call `model`. Force backend with `CLAUDE_CRITIC_BACKEND=api\|cli`. |
+| `glm` | `scripts/glm_critic.py` | `GLM_API_KEY` **or** `ZAI_API_KEY` | TRUE GLM voice, independent of the session provider — the RECIPROCAL of `claude-direct`: a real GLM opinion when qPlan runs on Claude. Paid flagship, auto-discovered (glm-5.x > glm-4.6 ...). OpenAI-compatible endpoint `GLM_BASE_URL` (default z.ai). Lock a model with `GLM_MODEL` or per-call `model`. |
+| `glm-free` | `scripts/glm_critic.py` | `GLM_API_KEY` **or** `ZAI_API_KEY` | Same script, **free** tier: pass `model: glm-4-flash` (override via `GLM_FREE_MODEL`). A free GLM voice that runs alongside the paid `glm` lens, so the panel hears both the paid and the free GLM. |
 
 ### GLM-awareness — get a real Claude voice even while running on GLM
 
@@ -154,8 +175,23 @@ real Claude (subscription via `claude -p`) + OpenAI + DeepSeek + SubQ
 (full-context) — every AI tool that is reachable. On Anthropic (normal launch)
 the `claude` lens already IS the real Claude, so `claude-direct` is redundant and
 may be dropped unless you explicitly want a second, differently-prompted Claude
-pass. This GLM-awareness applies transitively to `/qGoal`, which calls qPlan for
-its decisions.
+pass — but the `glm` and `glm-free` lenses are NOT redundant there: they add the
+reciprocal GLM voice so a Claude-launched qPlan still asks GLM (paid + free) for
+an opinion, mirroring the GLM->Claude path. This cross-provider awareness applies
+transitively to `/qGoal`, which calls qPlan for its decisions.
+
+**Reciprocal (Claude session -> consult GLM).** The mirror of the path above: on
+a normal Anthropic launch, `glm_critic.py` reaches z.ai independently of the
+session, so the panel hears GLM even while running on Claude. `glm` = the paid
+flagship (auto-discovered); `glm-free` = the same script with `model: glm-4-flash`
+so a FREE GLM voice sits alongside the paid one. Both need only `GLM_API_KEY` (or
+the launcher's existing `ZAI_API_KEY`); with no key, both mute. Honest limit on
+the OTHER direction: a Claude **subscription is not an API key**, so the GLM-side
+session can only get a real Claude voice through `claude -p` (the `cli` backend),
+which requires Claude Code to be permitted on that plan — a $20/Pro plan runs it
+on Sonnet (Opus limited), so `claude-direct` lands on Sonnet there via the
+fallback chain; if Claude Code is blocked on the plan entirely, the only Claude
+paths left are an `ANTHROPIC_API_KEY` (pay-per-token) or manual copy-paste.
 
 Caveats (state them honestly, do not over-promise): the `cli` subscription path
 assumes `claude -p` headless mode is available (Claude Code >= 2.x) and that
@@ -456,6 +492,62 @@ termination guarantees.
    (accept/reject + apply), the tier rubric classifies accepted
    suggestions, `no_progress` updates, and the termination check fires
    in the same order.
+
+### Provider relay mode (sequential cross-model refinement)
+
+When `provider_relay: true` (default), the **cross-model AI voices do NOT all
+critique the same plan version at once**. Instead the orchestrator (the Claude
+working in Claude Code) sends the plan to ONE provider at a time, applies that
+provider's accepted fixes, and passes the IMPROVED plan to the next provider —
+around the circle until it comes back. This is the "egyenként, javítva,
+továbbküldve, míg körbeér" behavior: each later voice reviews an already-better
+plan, so corroboration and incremental refinement accumulate instead of N
+providers redundantly flagging the same first-draft issues.
+
+This applies ONLY to the cross-model **provider** voices (the distinct AIs:
+`claude-direct`, `openai`, `deepseek`, `glm`, `glm-free`, `subq`, and the session
+`claude` voice). The 22 internal Claude-side lenses (architecture, risk, premortem,
+…) are NOT separate AIs and still run per `panel_parallel` — relay does not change
+them.
+
+**Relay procedure** (replaces step 3's parallel fan-out for the provider voices
+when `provider_relay: true`):
+
+1. **Build the lap order.** Take `relay_order`, drop any voice whose
+   key/backend is unavailable (mute, exactly as in parallel mode), and dedup so
+   the active provider is represented once — on Anthropic the session `claude`
+   lens stands in for `claude-direct`; on GLM the session `claude` lens stands in
+   for `glm`, and `claude-direct` supplies the real Claude. If fewer than 2
+   provider voices survive, relay is pointless: fall back to the normal
+   single/parallel critic turn for this round and note it in the transcript.
+2. **Seed.** `current_plan = plan.md` at the start of the lap.
+3. **For each provider voice V in lap order:**
+   a. Send V the **current** plan + task + ledger (V's own script/agent, same
+      per-voice prompt + bias injections as parallel mode). Get its
+      `{verdict, suggestions[]}`.
+   b. Run the ledger semantic-match (loop step `c`) on V's suggestions against
+      the live ledger, tagging `source_lens: V`. Cross-lap duplicates collapse
+      and bump `repeat_count` just as before.
+   c. **Author reacts and applies** (loop step `d`): accept/reject each new
+      suggestion with a one-line rationale; apply accepted ones to `plan.md`
+      (and code files in Phase B). Tier-classify accepted changes (step `e`).
+      This produces an improved plan.
+   d. `current_plan = plan.md` (the improved version) — and THAT is what the
+      next voice V+1 receives. Record a `#### Round N · relay · <V>` subsection
+      in the transcript with V's raw verdict and the resulting plan delta.
+4. **Lap close ("körbeér").** One full pass = one critic turn. The round's
+   merged verdict is the worst of the per-voice verdicts. `no_progress` updates
+   from the lap's accepted tiers, and the termination check fires in the normal
+   order. If the loop continues, the next round runs another lap (the circle goes
+   around again on the now-better plan) until qPlan converges or a cap trips.
+
+**Honest trade-off.** Relay is slower and more token-heavy than parallel (voices
+run in series, and the plan is re-sent, growing, each hop), and the *first* voice
+in the order never sees another AI's improvements within a lap — order has mild
+influence, which is why `relay_order` leads with the strongest general voice.
+In exchange you get cumulative cross-model refinement and far less duplicate
+noise. For a quick pass set `provider_relay: false` (parallel merge) or use
+`critic_provider: claude`.
 
 ### When to use which provider
 

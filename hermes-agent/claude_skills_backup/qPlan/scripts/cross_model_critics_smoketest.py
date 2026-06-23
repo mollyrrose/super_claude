@@ -17,6 +17,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import claude_critic as cc  # noqa: E402
+import glm_critic as gm  # noqa: E402
 import subq_critic as sq  # noqa: E402
 
 n = 0
@@ -97,5 +98,76 @@ for k, v in saved.items():
         os.environ.pop(k, None)
     else:
         os.environ[k] = v
+
+# --- claude_critic: cli_model_chain head + fallback + dedup ---
+os.environ.pop("CLAUDE_CRITIC_CLI_MODEL", None)
+check(cc.cli_model_chain() == ["opus", "sonnet", "haiku"],
+      "cli_model_chain default head is opus, full fallback chain")
+check(cc.cli_model_chain("sonnet") == ["sonnet", "opus", "haiku"],
+      "cli_model_chain override moves model to head and dedups")
+os.environ["CLAUDE_CRITIC_CLI_MODEL"] = "haiku"
+check(cc.cli_model_chain() == ["haiku", "opus", "sonnet"],
+      "cli_model_chain honors CLAUDE_CRITIC_CLI_MODEL env")
+os.environ.pop("CLAUDE_CRITIC_CLI_MODEL", None)
+
+# --- glm_critic: base url default + override strip ---
+os.environ.pop("GLM_BASE_URL", None)
+check(gm.base_url() == "https://api.z.ai/api/paas/v4", "glm default base url")
+os.environ["GLM_BASE_URL"] = "https://example.test/v4/"
+check(gm.base_url() == "https://example.test/v4", "glm base url override strips trailing slash")
+os.environ.pop("GLM_BASE_URL", None)
+
+# --- glm_critic: api_key prefers GLM_API_KEY, falls back to ZAI_API_KEY ---
+glm_saved = {k: os.environ.get(k) for k in ("GLM_API_KEY", "ZAI_API_KEY")}
+os.environ.pop("GLM_API_KEY", None)
+os.environ["ZAI_API_KEY"] = "zai-test"
+check(gm.api_key() == "zai-test", "glm api_key falls back to ZAI_API_KEY")
+os.environ["GLM_API_KEY"] = "glm-test"
+check(gm.api_key() == "glm-test", "glm api_key prefers GLM_API_KEY over ZAI_API_KEY")
+for k, v in glm_saved.items():
+    if v is None:
+        os.environ.pop(k, None)
+    else:
+        os.environ[k] = v
+
+# --- glm_critic: _pick_best honors MODEL_PRIORITY (glm-5 over glm-4.6) ---
+check(gm._pick_best(["glm-4-flash", "glm-4.6", "glm-5.2"]) == "glm-5.2",
+      "glm _pick_best prefers glm-5.x flagship")
+check(gm._pick_best(["glm-4-flash", "glm-4.6"]) == "glm-4.6",
+      "glm _pick_best falls to glm-4.6 when no glm-5")
+
+# --- glm_critic: build_messages embeds task/plan/ledger ---
+gm_msgs = gm.build_messages("do Y", "GLM PLAN", [{"text": "prior-g"}])
+gm_blob = json.dumps(gm_msgs)
+check("GLM PLAN" in gm_blob and "do Y" in gm_blob and "prior-g" in gm_blob,
+      "glm build_messages embeds task/plan/ledger")
+
+# --- glm_critic: opt-in skip when no key (subprocess, real script) ---
+genv = dict(os.environ)
+genv.pop("GLM_API_KEY", None)
+genv.pop("ZAI_API_KEY", None)
+gr = subprocess.run([sys.executable, str(HERE / "glm_critic.py")],
+                    input='{"task":"t","plan":"p","ledger":[]}',
+                    capture_output=True, text=True, env=genv)
+check(gr.returncode == 2 and ("GLM_API_KEY" in gr.stderr or "ZAI_API_KEY" in gr.stderr),
+      "glm exits 2 with clear msg when no key")
+
+# --- subq_critic: free-tier base url override + keyless mute ---
+os.environ.pop("SUBQ_FREE_BASE_URL", None)
+check(sq.base_url(free=True) == sq.base_url(free=False),
+      "subq free base falls back to normal base when SUBQ_FREE_BASE_URL unset")
+os.environ["SUBQ_FREE_BASE_URL"] = "https://free.subq.test/v1/"
+check(sq.base_url(free=True) == "https://free.subq.test/v1",
+      "subq free base honors SUBQ_FREE_BASE_URL and strips slash")
+os.environ.pop("SUBQ_FREE_BASE_URL", None)
+
+senv = dict(os.environ)
+for k in ("SUBQ_API_KEY", "SUBQ_FREE_API_KEY", "SUBQ_FREE_BASE_URL", "SUBQ_TIER"):
+    senv.pop(k, None)
+sr = subprocess.run([sys.executable, str(HERE / "subq_critic.py")],
+                    input='{"task":"t","plan":"p","ledger":[],"tier":"free"}',
+                    capture_output=True, text=True, env=senv)
+check(sr.returncode == 2 and "free" in sr.stderr.lower(),
+      "subq-free exits 2 with clear msg when no free key/endpoint")
 
 print(f"\nALL PASS ({n} checks)")

@@ -12,18 +12,33 @@ is OpenAI-shaped, this script is a focused clone of openai_critic.py pointed at
 SubQ's base URL + key + model.
 
 Reads JSON from stdin:
-  { "task": "...", "plan": "...", "ledger": [...], "model": "<optional>" }
+  { "task": "...", "plan": "...", "ledger": [...], "model": "<optional>",
+    "tier": "paid" | "free" }       # tier selects paid vs free credentials
 Writes JSON to stdout:
-  { "verdict": "...", "suggestions": [...], "provider": "subq", "model": "..." }
+  { "verdict": "...", "suggestions": [...], "provider": "subq"|"subq-free", "model": "..." }
 
-Opt-in: requires SUBQ_API_KEY. Without it the script exits non-zero with a clear
-message and the qPlan panel silently mutes the `subq` lens (same convention as
-the openai / deepseek lenses). Config:
-  - SUBQ_API_KEY   (required)   API key from console.subq.ai
-  - SUBQ_BASE_URL  (optional)   default https://api.subq.ai/v1
-  - SUBQ_MODEL     (optional)   default subq-preview; or pass "model" on stdin
+Two tiers (ONE script, TWO lenses) — mirrors glm_critic.py:
+  - paid (`subq` lens):      requires SUBQ_API_KEY.
+  - free (`subq-free` lens): for the "no paid API key" case. Selected by
+    `tier: "free"` on stdin (or SUBQ_TIER=free). Uses the SUBQ_FREE_* env vars
+    and ALLOWS a keyless request (no Authorization header) when a free endpoint
+    is configured — so the moment SubQ offers a free key OR a keyless free
+    endpoint, this lens lights up. Honest caveat: SubQ currently has no known
+    keyless free tier, so without SUBQ_FREE_API_KEY *or* SUBQ_FREE_BASE_URL the
+    `subq-free` lens mutes (exits non-zero), exactly like any other unconfigured
+    cross-model lens.
 
-Stdlib only.
+Config:
+  - SUBQ_API_KEY        (paid, required)   API key from console.subq.ai
+  - SUBQ_BASE_URL       (optional)         default https://api.subq.ai/v1
+  - SUBQ_MODEL          (optional)         default subq-preview; or pass "model"
+  - SUBQ_FREE_API_KEY   (free, optional)   free-tier key, if SubQ issues one
+  - SUBQ_FREE_BASE_URL  (free, optional)   free/keyless endpoint, if one exists
+  - SUBQ_FREE_MODEL     (free, optional)   default subq-preview
+
+Opt-in: a tier whose credentials are unavailable exits non-zero with a clear
+message and the qPlan panel silently mutes that lens (same convention as the
+openai / deepseek / glm lenses). Stdlib only.
 """
 
 import json
@@ -74,20 +89,30 @@ MAX_TOTAL_CHUNKS = 8
 _total_chunks_submitted = 0
 
 
-def base_url() -> str:
+def base_url(free: bool = False) -> str:
+    if free:
+        fb = os.environ.get("SUBQ_FREE_BASE_URL")
+        if fb:
+            return fb.rstrip("/")
     return (os.environ.get("SUBQ_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
 
 
-def discover_model(api_key: str) -> str:
-    """SubQ is OpenAI-compatible, so /v1/models *may* list models. Try it; on
-    any error fall back to the documented default. We do not cache — the model
-    set is tiny and the default is almost always right."""
+def _headers(api_key: str) -> dict:
+    """Auth header only when a key is present — a configured free/keyless
+    endpoint is queried without Authorization."""
+    h = {"Content-Type": "application/json"}
+    if api_key:
+        h["Authorization"] = f"Bearer {api_key}"
+    return h
+
+
+def discover_model(base: str, api_key: str) -> str:
+    """SubQ is OpenAI-compatible, so /models *may* list models. Try it; on any
+    error fall back to the documented default. We do not cache — the model set
+    is tiny and the default is almost always right."""
     try:
         req = urllib.request.Request(
-            f"{base_url()}/models",
-            headers={"Authorization": f"Bearer {api_key}"},
-            method="GET",
-        )
+            f"{base}/models", headers=_headers(api_key), method="GET")
         with urllib.request.urlopen(req, timeout=30) as resp:
             body = json.loads(resp.read().decode("utf-8"))
         ids = [m.get("id", "") for m in body.get("data", [])]
@@ -96,13 +121,12 @@ def discover_model(api_key: str) -> str:
             for mid in ids:
                 if mid == pref:
                     return mid
-        # Else first listed model, else default.
         return ids[0] if ids else DEFAULT_MODEL
     except Exception:
         return DEFAULT_MODEL
 
 
-def call_subq(api_key, model, task, plan, ledger, depth=0) -> dict:
+def call_subq(base, api_key, model, task, plan, ledger, depth=0) -> dict:
     global _total_chunks_submitted
     _total_chunks_submitted += 1
     payload = {
@@ -116,12 +140,9 @@ def call_subq(api_key, model, task, plan, ledger, depth=0) -> dict:
         "temperature": 0.3,
     }
     req = urllib.request.Request(
-        f"{base_url()}/chat/completions",
+        f"{base}/chat/completions",
         data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
+        headers=_headers(api_key),
         method="POST",
     )
     try:
@@ -140,13 +161,13 @@ def call_subq(api_key, model, task, plan, ledger, depth=0) -> dict:
                     f"Response: {body_text}\n")
                 sys.exit(2)
             time.sleep(2 ** depth)
-            sub = [call_subq(api_key, model, task, p, ledger, depth + 1) for p in parts]
+            sub = [call_subq(base, api_key, model, task, p, ledger, depth + 1) for p in parts]
             merged = merge_verdicts(sub)
             merged["_chunks_submitted"] = sum(v.get("_chunks_submitted", 1) for v in sub)
             return merged
         if e.code in (401, 403):
             sys.stderr.write(
-                f"subq_critic: HTTP {e.code} — bad or revoked SUBQ_API_KEY.\n")
+                f"subq_critic: HTTP {e.code} — bad or revoked SubQ key.\n")
             sys.exit(2)
         sys.stderr.write(f"subq_critic: HTTP {e.code} — {body_text}\n")
         sys.exit(2)
@@ -169,26 +190,47 @@ def call_subq(api_key, model, task, plan, ledger, depth=0) -> dict:
 
 
 def main() -> None:
-    api_key = os.environ.get("SUBQ_API_KEY")
-    if not api_key:
-        sys.stderr.write(
-            "subq_critic: SUBQ_API_KEY not set. The subq lens is opt-in; set the "
-            "key (from console.subq.ai) to enable it, or drop the subq lens.\n")
-        sys.exit(2)
-
     try:
         req_in = json.loads(sys.stdin.read())
     except json.JSONDecodeError as e:
         sys.stderr.write(f"subq_critic: bad JSON on stdin — {e}\n")
         sys.exit(2)
 
+    free = (str(req_in.get("tier", "")).lower() == "free"
+            or os.environ.get("SUBQ_TIER", "").lower() == "free")
+
+    if free:
+        api_key = os.environ.get("SUBQ_FREE_API_KEY") or ""
+        free_base = os.environ.get("SUBQ_FREE_BASE_URL")
+        if not api_key and not free_base:
+            sys.stderr.write(
+                "subq_critic: free tier requested but neither SUBQ_FREE_API_KEY "
+                "nor SUBQ_FREE_BASE_URL is set. SubQ has no known keyless free "
+                "tier, so the subq-free lens mutes until you supply a free key "
+                "or point SUBQ_FREE_BASE_URL at a free endpoint.\n")
+            sys.exit(2)
+        base = base_url(free=True)
+        model_env = os.environ.get("SUBQ_FREE_MODEL")
+        provider = "subq-free"
+    else:
+        api_key = os.environ.get("SUBQ_API_KEY")
+        if not api_key:
+            sys.stderr.write(
+                "subq_critic: SUBQ_API_KEY not set. The subq lens is opt-in; set "
+                "the key (from console.subq.ai) to enable it, or use the "
+                "subq-free lens (tier:free), or drop subq.\n")
+            sys.exit(2)
+        base = base_url(free=False)
+        model_env = os.environ.get("SUBQ_MODEL")
+        provider = "subq"
+
     task = req_in.get("task", "")
     plan = req_in.get("plan", "")
     ledger = req_in.get("ledger", [])
-    model = req_in.get("model") or os.environ.get("SUBQ_MODEL") or discover_model(api_key)
+    model = req_in.get("model") or model_env or discover_model(base, api_key)
 
-    verdict = call_subq(api_key, model, task, plan, ledger)
-    verdict["provider"] = "subq"
+    verdict = call_subq(base, api_key, model, task, plan, ledger)
+    verdict["provider"] = provider
     verdict["model"] = model
     verdict["chunks_submitted"] = verdict.pop("_chunks_submitted", 1)
 
