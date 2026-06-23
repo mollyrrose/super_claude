@@ -235,6 +235,85 @@ that works instead of clever machinery.
 - **Kill switch.** Anything you automate must be easy to disable or revert —
   note how to turn it off at the moment you add it.
 
+## Hang-prone commands: background + file output by default
+
+The Claude Code harness can fail to return a tool result to the model with
+`[Tool result missing due to internal error]`. That is a RESULT-DELIVERY failure
+at the harness layer, NOT a hook-able event -- no hook (PreToolUse, PostToolUse,
+Stop, etc.) can intercept or rescue it, and nothing outside the window can resume
+a frozen REPL (the same hard limit `window_watchdog.py` and `load_retry_runner.py`
+already document). It cannot be PREVENTED, but it can be made HARMLESS: if a
+command's output is on disk, the swallowed inline result costs nothing -- just
+read the file.
+
+So by DEFAULT, for any shell command that is long-running or hang-prone (network
+fetches, test suites, builds, large computations, anything that has wedged
+before), do BOTH:
+
+1. Run it with `run_in_background: true` (or via `load_retry_runner.py`, which
+   adds a load-gate + tree-kill timeout + retry). A backgrounded command keeps
+   running across an internal-error glitch and notifies on completion.
+2. Make it write its real output to a FILE (`> out.txt 2>&1`, a `--json -o`
+   report path, or `load_retry_runner.py`'s captured output), then `Read` that
+   file for the result instead of trusting the inline tool return.
+
+Quick/cheap commands (`ls`, `git status`, a single `grep`) stay inline -- this is
+for the hang-prone ones. To find WHICH tool froze when it does happen, read the
+transcript's last `tool_use` that has no matching `tool_result` (works for any
+tool type, not just Bash).
+
+Kill switch: this is a CONVENTION, not automation -- ignore it for a given
+command, or set `LOAD_RETRY_DISABLE=1` to make `load_retry_runner.py` a
+pass-through single run.
+
+## Token compression layer (tokenjuice) -- compress noisy output before it costs context
+
+Verbose tool output is where most context-window tokens go to die: a `git status`
+in a busy repo, a `cargo build` log, a `docker ps -a` against a real cluster, a
+600-line `pip install`. `scripts/tokenjuice.py` (installed to
+`~/.claude/scripts/tokenjuice.py`, smoketest `tokenjuice_smoketest.py`) runs a
+command's output through a DETERMINISTIC rule overlay that strips the noise and
+keeps the signal. Inspired by openhuman's "TokenJuice" (no code copied): a
+three-layer JSON rule overlay (builtin < user < project, later overrides earlier
+by rule `name`), each rule naming a command pattern + a list of reduction
+strategies (strip_ansi, fold_whitespace, dedup_lines, drop_regex, keep_regex,
+truncate, summarize_sections, html_to_markdown, shorten_urls). All strategies are
+pure rules -- no LLM call, free, private, reproducible.
+
+HARD LIMIT (state this honestly, same wall load_retry_runner.py / window_watchdog.py
+document): a Claude Code hook CANNOT rewrite a tool result before the model sees
+it -- the tool result is fixed by the time a PostToolUse hook runs. So this is NOT
+an automatic, transparent interceptor like openhuman's own harness has; it is
+OPT-IN -- you PIPE the noisy command through it. It composes with the
+load_retry_runner convention above (wrap for compression, gate/retry, or both).
+
+Rule layers:
+- builtin -- shipped in `tokenjuice.py` (git, npm, cargo, docker, kubectl, ls,
+  grep/rg, pip, pytest, + a universal strip_ansi/fold_whitespace rule).
+- user -- `~/.claude/tokenjuice/rules/*.json` (across all projects; see the
+  README + `example.json.example` there).
+- project -- `./.tokenjuice/rules/*.json` (repo-specific, committable).
+
+Usage:
+
+```
+python ~/.claude/scripts/tokenjuice.py -- git status        # run + compress its output
+some-noisy-command | python ~/.claude/scripts/tokenjuice.py --for "some-noisy-command"
+python ~/.claude/scripts/tokenjuice.py --json -- cargo build # machine-readable savings footer
+python ~/.claude/scripts/tokenjuice.py --probe --for "git log"   # show which rules match
+python ~/.claude/scripts/tokenjuice.py --list-rules         # dump merged ruleset
+```
+
+In `-- <command>` mode the command's exit code is passed through (transparent),
+the compressed text goes to stdout, and the savings footer to stderr. Reach for
+it on KNOWN-noisy commands (build/test logs, large listings, status dumps, HTML
+scrapes) -- not on already-small output. It is governed by the same "lowest
+autonomy that works" rule: a one-off CLI call, not a daemon or hook.
+
+Kill switch: `TOKENJUICE_DISABLE=1` (or `--raw`) -> pass-through, output
+uncompressed, so a bad rule can never hide anything. Or just run the command
+directly without the wrapper.
+
 ## Hot-path hook consolidation (one process, not N)
 
 When a latency-sensitive event fires SEVERAL command hooks in series — the

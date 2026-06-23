@@ -165,3 +165,30 @@ already exists per call, so no per-tool hook is needed.
 
 Kill switch: `LOAD_RETRY_DISABLE=1` (pass-through single run, no gate/retry), or
 just don't call it. No daemon, no hook -- nothing persists when it exits.
+
+## Token compression layer (tokenjuice)
+
+`scripts/tokenjuice.py` (installed to `~/.claude/scripts/`, smoketest
+`tokenjuice_smoketest.py`) is a DETERMINISTIC, OPT-IN compressor for noisy tool
+output: you pipe a known-verbose command through it and a three-layer JSON rule
+overlay (builtin < user `~/.claude/tokenjuice/rules/` < project
+`./.tokenjuice/rules/`, later overrides earlier by rule `name`) strips the noise
+before it costs context. Strategies: strip_ansi, fold_whitespace, dedup_lines,
+drop_regex, keep_regex, truncate, summarize_sections, html_to_markdown,
+shorten_urls -- all pure rules, no LLM. Inspired by openhuman's "TokenJuice"; no
+code copied. Full rationale + the harness limit (a hook cannot rewrite a tool
+result, so this is opt-in not automatic) and usage are in the global
+`~/.claude/CLAUDE.md` under "Token compression layer (tokenjuice)" and mirrored in
+`home_dotclaude/CLAUDE.md`.
+
+```
+python ~/.claude/scripts/tokenjuice.py -- git status         # run + compress
+some-noisy-cmd | python ~/.claude/scripts/tokenjuice.py --for "some-noisy-cmd"
+python ~/.claude/scripts/tokenjuice.py --probe --for "cargo build"   # dry-run match
+```
+
+Same change discipline as the hooks: keep the silent no-op-on-bad-input pattern
+(a malformed rule / strategy is skipped, never fatal), run `tokenjuice_smoketest.py`
+before trusting a change, and after editing `scripts/tokenjuice.py` copy it to
+`~/.claude/scripts/` for it to take effect. Kill switch: `TOKENJUICE_DISABLE=1`
+(or `--raw`) -> pass-through, uncompressed.
