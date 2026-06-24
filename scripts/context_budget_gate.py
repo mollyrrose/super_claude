@@ -46,6 +46,21 @@ HARD_REMAIN_PCT = int(os.environ.get("CC_BUDGET_HARD_PCT", "10"))
 # nudge a hair earlier than the auto-compact point -- giving the user a chance
 # to choose the precise /qClose handoff instead of the lossy summary.
 QCLOSE_REMAIN_PCT = int(os.environ.get("CC_BUDGET_QCLOSE_PCT", "18"))
+# qUpd pre-compaction flush tier: fires EARLIER than the qClose tier (more
+# headroom above the auto-compact floor) so there is still context-room to run
+# /qUpd's doc refreshes -- writing the durable tracking docs
+# (INDEX/TODO/SYSTEM_STATUS/drawio) to disk BEFORE the lossy auto-compaction, so
+# the post-compact session has ground truth to re-derive from. Default 35%
+# remaining (sits above SOFT 25% and QCLOSE 18%). It is fire-once per session so
+# it does not nag every prompt; it re-fires only if context climbs another
+# QUPD_REDO_DELTA points after a prior flush (to refresh the docs again closer to
+# the compaction boundary). Disable with CC_BUDGET_QUPD_DISABLE=1.
+QUPD_REMAIN_PCT = int(os.environ.get("CC_BUDGET_QUPD_PCT", "35"))
+QUPD_REDO_DELTA = int(os.environ.get("CC_BUDGET_QUPD_REDO_DELTA", "15"))
+QUPD_DISABLE = os.environ.get("CC_BUDGET_QUPD_DISABLE", "").strip() not in ("", "0", "false", "False")
+QUPD_STATE_PATH = os.environ.get("CC_BUDGET_QUPD_STATE", "").strip() or os.path.expanduser(
+    "~/.claude/.context_qupd_flush_state.json"
+)
 TOKEN_LIMIT_OVERRIDE_RAW = os.environ.get("CC_CONTEXT_LIMIT", "").strip()
 TOKEN_LIMIT_FALLBACK = int(os.environ.get("CC_CONTEXT_LIMIT_DEFAULT", "200000"))
 ROUGH_CHARS_PER_TOKEN = 4
@@ -234,6 +249,75 @@ def _detect_token_limit(payload: dict) -> int:
     return TOKEN_LIMIT_FALLBACK
 
 
+def _load_flush_state() -> dict:
+    """Per-session record of the last qUpd-flush point. Fail-soft to {}."""
+    try:
+        with open(QUPD_STATE_PATH, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _qupd_flush_due(session_id: str, used_pct: int) -> bool:
+    """True if this session has never flushed, or has consumed at least
+    QUPD_REDO_DELTA more percent of the window since its last flush."""
+    state = _load_flush_state()
+    entry = state.get(session_id)
+    if not isinstance(entry, dict):
+        return True
+    last = entry.get("used_pct")
+    if not isinstance(last, (int, float)):
+        return True
+    return (used_pct - last) >= QUPD_REDO_DELTA
+
+
+def _record_flush(session_id: str, used_pct: int) -> None:
+    """Mark this session flushed at used_pct. Fail-soft; bounds file size."""
+    if not session_id:
+        return
+    try:
+        data = _load_flush_state()
+        data[session_id] = {"used_pct": used_pct}
+        if len(data) > 200:  # keep the most-recently-inserted ~200 sessions
+            for k in list(data.keys())[:-200]:
+                data.pop(k, None)
+        with open(QUPD_STATE_PATH, "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+    except Exception:
+        pass
+
+
+def _build_qupd_flush_context(remain_pct: int) -> str:
+    """Pre-compaction flush tier: run /qUpd's doc refreshes NOW, with headroom,
+    so the durable tracking docs survive the imminent lossy auto-compaction.
+
+    Unlike the qClose tier this does NOT stop or banner -- it instructs Claude to
+    flush the docs proactively, report one line, and continue with the user's
+    actual prompt. A pre-compaction flush only WRITES the files to disk: it must
+    NOT commit and must NOT push (the files persist on disk through compaction;
+    committing is a separate later step).
+    """
+    return (
+        "<<context-budget-gate>>\n"
+        f"[context-budget PRE-COMPACT FLUSH] remaining ~{remain_pct}% -- a lossy "
+        "auto-compaction is approaching while there is still headroom.\n\n"
+        "IMPORTANT: Before working on the user's prompt above, run the /qUpd doc "
+        "refreshes NOW (invoke the qUpd skill): update INDEX.md, "
+        "exclude/SYSTEM_STRATEGIES/TODO.md, SYSTEM_STATUS.md, and regenerate "
+        "system_map.drawio only if the architecture actually changed. Writing "
+        "these durable docs to disk before the compaction gives the post-compact "
+        "session ground truth to re-derive from instead of the lossy summary. "
+        "Do NOT run qUpd's commit or push step -- a pre-compaction flush must "
+        "ONLY write the updated files to disk, never commit and never push. qUpd "
+        "self-skips if nothing meaningful changed. After the flush, note it in "
+        "ONE short line in the user's language (do NOT mention this gate by "
+        "name), then continue with the user's actual prompt normally. Do not stop "
+        "or ask for confirmation; just flush, report one line, and proceed.\n"
+        "<</context-budget-gate>>"
+    )
+
+
 def _build_qclose_context(remain_pct: int) -> str:
     """Strongest tier: context is nearly full and auto-compact is imminent.
 
@@ -298,6 +382,30 @@ def main() -> int:
             "hookSpecificOutput": {
                 "hookEventName": "UserPromptSubmit",
                 "additionalContext": _build_qclose_context(remain_pct),
+            }
+        }
+        print(json.dumps(decision))
+        return 0
+
+    # Next tier: pre-compaction qUpd flush. Fires earlier than qClose (more
+    # headroom) so /qUpd can write the durable docs before the lossy compaction.
+    # Fire-once per session (re-fires only after QUPD_REDO_DELTA more % consumed)
+    # and requires a session_id to dedupe -- without one we cannot avoid nagging,
+    # so we skip rather than loop.
+    session_id = payload.get("session_id") or payload.get("sessionId")
+    session_id = session_id.strip() if isinstance(session_id, str) else ""
+    if (
+        not QUPD_DISABLE
+        and used > 0
+        and session_id
+        and remain_pct <= QUPD_REMAIN_PCT
+        and _qupd_flush_due(session_id, used_pct)
+    ):
+        _record_flush(session_id, used_pct)
+        decision = {
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": _build_qupd_flush_context(remain_pct),
             }
         }
         print(json.dumps(decision))
