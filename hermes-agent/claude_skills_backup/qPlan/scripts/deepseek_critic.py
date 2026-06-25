@@ -252,6 +252,20 @@ def call_deepseek(
             body = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         body_text = e.read().decode("utf-8", "replace")
+        low = body_text.lower()
+        # Budget/quota exhaustion. DeepSeek has NO free/keyless tier, so unlike
+        # openai (-> browser) and glm (-> free model) there is nothing to fall
+        # back to. Per the user's "don't stop the round" policy, the correct
+        # behaviour here is to MUTE just this lens (exit 2) — the qPlan round
+        # continues with the remaining providers. DeepSeek signals a dead
+        # balance with HTTP 402 / "Insufficient Balance".
+        if e.code == 402 or "insufficient balance" in low or "insufficient_balance" in low:
+            sys.stderr.write(
+                "deepseek_critic: balance/quota exhausted. DeepSeek has no free "
+                "fallback, so this lens is muted; the qPlan round continues with "
+                "the remaining providers.\n"
+            )
+            sys.exit(2)
         if (
             e.code == 429
             and depth < MAX_CHUNK_DEPTH

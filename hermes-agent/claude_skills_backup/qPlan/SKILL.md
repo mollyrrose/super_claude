@@ -119,7 +119,13 @@ relay_order:                   # order the provider voices take their turn (acti
   - glm-free
   - subq
   - subq-free                  # free SubQ voice (tier:free) — joins the circle when configured/keyless
-openai_backend: api            # api | browser (browser is a stub in v1)
+openai_backend: api            # api | browser
+                               #   api     = OpenAI HTTP API (needs OPENAI_API_KEY)
+                               #   browser = drive the logged-in ChatGPT web
+                               #             session via Playwright — NO API key
+                               #             (rides your ChatGPT subscription).
+                               #             One-time: `python scripts/openai_critic.py --login`.
+                               #             Also set via env QPLAN_OPENAI_BACKEND=browser.
 model: <provider default>      # claude: current session
                                # openai: auto-pick best /v1/models entry
                                # (gpt-5.5 > gpt-5.1 > gpt-5 > o3-pro > o3 > ...,
@@ -132,21 +138,53 @@ author_prefix:  "Erről mit gondolsz?:"
 critic_prefix:  "Erről mit gondolsz? Hol javítanád?:"
 ```
 
-`critic_provider: openai` (and the `openai` lens inside `panel` mode) require
-`OPENAI_API_KEY`. The script fails loud if the key is missing — it does NOT
-silently fall back to `claude`, because the whole point of provider
-comparison is to keep them distinguishable.
+`critic_provider: openai` (and the `openai` lens inside `panel` mode) need
+EITHER an OpenAI credential path, depending on `openai_backend`:
+
+- **`api` (default)** — requires `OPENAI_API_KEY`. The script fails loud if the
+  key is missing — it does NOT silently fall back to `claude`, because the whole
+  point of provider comparison is to keep them distinguishable.
+- **`browser`** — requires NO API key. It drives the **logged-in ChatGPT web
+  session** via Playwright, riding your ChatGPT subscription. One-time setup:
+  `python scripts/openai_critic.py --login` (opens a browser; log in once, the
+  session persists in `~/.claude/.qplan_chatgpt_profile`). Then run qPlan with
+  `openai_backend: browser` (or env `QPLAN_OPENAI_BACKEND=browser`). Needs
+  Playwright: `pip install playwright` then `playwright install chromium`.
+  HONEST CAVEAT: automating the ChatGPT web UI is against OpenAI's ToS, is
+  brittle (UI / Cloudflare changes can break it), and is slower than the API —
+  any failure just **mutes** the lens (exit 2) instead of crashing the round.
+  Env knobs: `QPLAN_OPENAI_BROWSER_HEADLESS=1` (try headless; ChatGPT often
+  blocks it, default is headed), `QPLAN_CHATGPT_PROFILE_DIR` (override/kill the
+  saved profile location).
 
 ### Cross-model lenses are opt-in — mute, don't fail, when a key/backend is missing
 
 Each cross-model lens has its own provider script and credential. A lens whose
 credential/backend is unavailable is **silently muted** from the panel for that
 run (it does NOT fail the round — same spirit as `/qRev`'s multi-provider policy).
+
+**Budget-exhaustion fallback (a valid key but a dead balance must NOT stop the
+round).** When a paid provider's key is present but its balance/quota is
+exhausted (HTTP 402, or 429 with an insufficient-quota/-balance body), the round
+keeps going by switching that provider to a keyless/free path where one exists,
+rather than just muting:
+
+- **`openai`** — on budget exhaustion the api backend automatically falls back
+  to the **browser** backend (the logged-in ChatGPT web session, no balance
+  needed). Disable with `QPLAN_OPENAI_NO_BROWSER_FALLBACK=1` (then it mutes).
+  Needs the one-time `--login`; if not logged in it mutes.
+- **`glm`** — on budget exhaustion it retries on the **free model**
+  (`glm-4-flash`, override `GLM_FREE_MODEL`) on the same key. Disable with
+  `QPLAN_GLM_NO_FREE_FALLBACK=1`.
+- **`deepseek`** — has **no** free/keyless tier, so there is nothing to fall
+  back to: budget exhaustion mutes just this one lens and the round continues
+  with the remaining providers.
+
 The roster of external voices:
 
 | Lens | Script | Needs | Notes |
 |---|---|---|---|
-| `openai` | `scripts/openai_critic.py` | `OPENAI_API_KEY` | auto-picks highest gpt-5.x / o-series |
+| `openai` | `scripts/openai_critic.py` | `OPENAI_API_KEY` (api backend) **or** a one-time `--login` (browser backend, no key) | api backend auto-picks highest gpt-5.x / o-series. `openai_backend: browser` rides the logged-in ChatGPT web session via Playwright instead (no key, ToS-gray, brittle, mutes on any failure). |
 | `deepseek` | `scripts/deepseek_critic.py` | `DEEPSEEK_API_KEY` | auto-picks highest DeepSeek |
 | `subq` | `scripts/subq_critic.py` | `SUBQ_API_KEY` | OpenAI-compatible (`https://api.subq.ai/v1`, model `subq-preview`). **Full-context lens** — ~1M (12M gated). Feed it MORE context than other models can hold: whole files, large reference docs, prior rounds. "Use the huge budget cleverly" = route the big-context judgment here. Override base/model via `SUBQ_BASE_URL` / `SUBQ_MODEL`. |
 | `subq-free` | `scripts/subq_critic.py` | `SUBQ_FREE_API_KEY` **or** `SUBQ_FREE_BASE_URL` | Same script, **free** tier for the no-paid-key case: call with `tier: "free"`. Sends WITHOUT an `Authorization` header when keyless, so it lights up the moment SubQ offers a free key or a keyless free endpoint. Honest limit: SubQ has no known keyless free tier today, so `subq-free` mutes until `SUBQ_FREE_API_KEY` or `SUBQ_FREE_BASE_URL` (+ optional `SUBQ_FREE_MODEL`) is set. |

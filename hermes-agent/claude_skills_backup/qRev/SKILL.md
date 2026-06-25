@@ -1,9 +1,11 @@
 ---
 name: qRev
-description: Deep review of what you're about to commit — runs `/qMin`'s 5-axis check + `/rev exhaustive`'s 3-pass multi-agent fleet on the **uncommitted diff** (staged + unstaged), then synthesises both into a single P0/P1/P2/P3 punch-list. Optional `topic:<name>` arg keeps exhaustive depth but narrows the agent lens (security / db / perf / ml / tests). Invoked via /qRev (canonical) OR any case variant — /qrev, /Qrev, /QRev, /QREV all map to this same skill (case-insensitive). If the user types any of these, treat as a /qRev invocation and proceed with this skill.
+description: Deep review of what you're about to commit — runs `/qMin`'s 5-axis check + the full 3-pass multi-agent fleet on the **uncommitted diff** (staged + unstaged), then synthesises both into a single P0/P1/P2/P3 punch-list. The fleet is ALWAYS run in full (the complete roster, up to the 15-agent cap) — there is no reduced/subset mode; the depth formerly called "exhaustive" is the only depth. Optional `topic:<name>` arg still runs the COMPLETE fleet but emphasises one lens (security / db / perf / ml / tests) in the report. Invoked via /qRev (canonical) OR any case variant — /qrev, /Qrev, /QRev, /QREV all map to this same skill (case-insensitive). If the user types any of these, treat as a /qRev invocation and proceed with this skill.
 ---
 
-# qRev — Quick Review (qMin + rev exhaustive, fused)
+# qRev — Quick Review (qMin + full multi-agent fleet, fused)
+
+**qRev is always full-depth — there is no "exhaustive" toggle and no lighter qRev.** The complete agent fleet (every applicable agent in the roster, up to the hard cap of 15 parallel agents per pass) runs on every `/qRev`. You cannot cherry-pick a few agents out of it: it is all-or-nothing by design. The `topic:<name>` arg does NOT shrink the fleet — it keeps the whole roster and only changes which lens the report emphasises. The only thing any argument changes is the **scope** (which files), never the **size** of the fleet.
 
 **Case-insensitive invocation:** `/qRev`, `/qrev`, `/Qrev`, `/QRev`, `/QREV` are all the same skill. Treat any of them as a `/qRev` call and proceed below.
 
@@ -84,9 +86,9 @@ If Phase A returns **SHIP-BLOCK** (any `blocking` finding), the overall qRev ver
 
 Otherwise continue to Phase B.
 
-### Phase B — `/rev exhaustive`'s 3-pass agent fleet
+### Phase B — the full 3-pass agent fleet (always runs in full)
 
-Invoke `/rev` with mode `exhaustive` (read `~/.claude/skills/rev/SKILL.md`, "`/rev exhaustive` (3-pass)" section). All three passes run with the same skill-bundle map, agent roster, and synthesis rules. **Pass-1 inherits Phase 0 findings as context** — the agents must see them so they don't re-derive the same issues.
+Run the complete 3-pass agent fleet — read `~/.claude/skills/rev/SKILL.md`, "`/rev exhaustive` (3-pass)" section, and use it purely as the **definition of the roster** for the three passes. There is no other depth: qRev has no single-pass or reduced-fleet mode, so "which depth" is never a decision — Phase B is always all three passes with the complete roster. All three passes run with the same skill-bundle map, agent roster, and synthesis rules. **Pass-1 inherits Phase 0 findings as context** — the agents must see them so they don't re-derive the same issues.
 
 **Whole-file + context directive for every agent.** When constructing each agent's prompt from `/rev`'s "Agent prompt template", inject the depth requirement from the "Review depth" section above into the agent's instructions: the `SCOPE` file list is the set of changed files, but each agent MUST read every scope file **in full** and trace its **dependency context** (callers, callees, imports, subclasses/implementers, and the config/schema/fixtures/tests bound to the change) — not review the diff hunks in isolation. Add these lines to the agent prompt's `YOUR FOCUS` block:
 
@@ -104,15 +106,25 @@ REVIEW DEPTH (mandatory): The SCOPE files are what CHANGED, not the limit of wha
   fully read under "Coverage gaps" instead of silently reviewing diff-only.
 ```
 
-If a `topic:<name>` arg was passed, **each pass's agent roster is filtered** to the topic-relevant agent list from `/rev`'s "topic:*" table (intersected with the pass's normal roster). This gives an exhaustive 3-pass *depth* but narrowed to one *lens*. See the argument-forms table below.
+If a `topic:<name>` arg was passed, the agent roster is **NOT** filtered — every pass still runs its complete roster. The topic only changes *emphasis*: tell the agents the named lens (security / db / perf / ml / tests) is the priority focus for this run, and order/highlight the topic-relevant findings first in the synthesis. You still get the full 3-pass coverage; topic just foregrounds one lens in the report. See the argument-forms table below.
 
-**Run the COMPLETE roster — every agent, every pass. This is non-negotiable.** A default (non-`topic`, non-`fast`) `/qRev` runs the **full `/rev exhaustive` roster across all three passes — roughly 12–15 agents in total** (Pass 1 quality/correctness, Pass 2 security, Pass 3 architecture+DB+perf+tests, per `/rev`'s "`/rev exhaustive` (3-pass)" list). Dispatch the full roster for each pass. Do **not** silently drop, sample, or "pick a few representative" agents to save time.
+**Run the COMPLETE roster — every agent, every pass. This is non-negotiable, with no exceptions.** Every `/qRev` (including `topic:<name>`) runs the **full roster across all three passes — every applicable agent, up to the hard cap of 15 parallel agents per pass** (Pass 1 quality/correctness, Pass 2 security, Pass 3 architecture+DB+perf+tests, per `/rev`'s "`/rev exhaustive` (3-pass)" list). Dispatch the full roster for each pass. Do **not** silently drop, sample, narrow, or "pick a few representative" agents — not to save time, not for a topic, not for any reason. The roster is bound together: it runs whole or the run is invalid.
 
-**A 3-lens (or any hand-picked small subset) run is a VIOLATION unless the user passed `topic:<name>` or `fast`.** If you catch yourself about to launch "qRev fleet (3 lenses)" — e.g. just security + typescript + code-reviewer — stop: that is a plain `/rev`, not `/qRev exhaustive`. The whole point of `/qRev` over a quick `/rev` is the exhaustive multi-pass coverage. The only sanctioned ways to run fewer agents are: `topic:<name>` (narrows to that lens's roster) or `fast` (Phase A only, no fleet). Absent those args, launch the entire pass roster — the value of the fleet is independent coverage, and a missing agent is a missing lens. Launch each pass's whole roster in parallel (one message, multiple Agent calls).
+**Any hand-picked subset of the roster is a VIOLATION — there is no longer ANY sanctioned way to run fewer agents.** If you catch yourself about to launch "qRev fleet (3 lenses)" — e.g. just security + typescript + code-reviewer — stop: that is a plain `/rev`, not `/qRev`. The whole point of `/qRev` is the full multi-pass coverage. The old `fast` mode (Phase A only, no fleet) and the old `topic:`-narrowing behaviour have both been removed precisely so the fleet can never be reduced: `fast` no longer exists, and `topic:` keeps the entire roster. Launch the roster in **batched waves** (see "Batched execution" right below) — every agent still runs, just not all 15 in one simultaneous burst. A missing agent is a missing lens, and an incomplete fleet means the qRev did not actually run — re-launch the missing agents rather than reporting on a partial fleet.
+
+**Batched execution (5×3) + pipelined fixes — run all 15, but bound the system load.** Firing 15 subagents in one simultaneous burst spikes CPU/RAM. So launch the COMPLETE roster in **waves**, not all at once: the three passes are the natural batches (~5 agents each -> "5×3" = 15). Cap concurrency at ~5 agents in flight at a time (override with `QREV_FLEET_CONCURRENCY`, default 5; drop it to 3 on a loaded machine). This changes only the *scheduling*, never the *roster* — all 15 still run; you are throttling how many run at once, not dropping any. If a pass's roster exceeds the cap (Pass 3 can be 6), split that pass into sub-waves of ≤ the cap.
+
+Pipeline the waves with the fixing so the machine is never both fully reviewing AND idle-waiting:
+
+1. Launch wave 1 (≤ cap agents, one message / multiple Agent calls). When it returns, **print wave 1's findings** (preserve show-before-fix at wave granularity), then START applying wave 1's fixes.
+2. **At the same time**, launch wave 2's review **in the background** (`run_in_background: true` for the next wave's dispatch and for any shell fix/verify commands, per the repo's "background + file output" convention). So wave 2 reviews while wave 1's fixes apply.
+3. Repeat: wave 3 reviews in the background while wave 2's fixes apply; finish wave 3's fixes last.
+
+Net effect: at most ~5 review agents plus the current wave's fix work run concurrently instead of 15 agents at once, the next check is always pre-running in the background, and peak load stays bounded. The **final synthesis still waits for ALL three waves to have returned** before producing the fused consolidated report — pipelining overlaps the work, it does not let the report skip a wave. (This batched/pipelined ordering is the sanctioned exception to the otherwise-strict "report THEN fix" rule below: you report and fix *per wave* while the next wave reviews, then consolidate at the end.)
 
 An agent that returns after **0–1 tool uses** (or near-instantly, with no `Read`/`Grep` of the scope files) has **not** done the whole-file + context review this skill requires — treat it as a **failed dispatch, not a clean verdict**: re-dispatch it once with an explicit reminder that it must actually read the scope files in full before reporting. If it fails again, record it under "Coverage gaps" (`agent <name>: did not engage scope`) rather than counting its empty result as "CLEAN". A pass is only complete when every agent in its roster has actually engaged the scope. (Note: a live progress display showing an agent at "0 tool uses … Initializing…" just means it has not started yet — that is normal mid-run, not a no-op; the rule above is about agents that *finish* without engaging.)
 
-Wall-clock: 15–30 min (default scope), 5–10 min (topic-filtered exhaustive). Cost is covered by the active subscription (whichever provider is in use) — there is no per-token bill; only your time matters and 15–30 min is well within budget.
+Wall-clock: 15–30 min (the full fleet always runs; `topic:` does not shorten it since the roster is unchanged). Cost is covered by the active subscription (whichever provider is in use) — there is no per-token bill; only your time matters and 15–30 min is well within budget.
 
 ### Final synthesis
 
@@ -142,18 +154,17 @@ The point of `/qRev` is: deep, multi-lens review of **what THIS session is about
 
 | Invocation | Scope | Mode |
 |---|---|---|
-| `/qRev` | uncommitted diff (staged + unstaged) | qMin -> Phase A -> exhaustive 3-pass |
-| `/qRev <path>` | uncommitted diff ∩ files under `<path>` | qMin -> Phase A -> exhaustive 3-pass |
-| `/qRev PR#<n>` | `gh pr diff <n>` file list | qMin -> Phase A -> exhaustive 3-pass |
-| `/qRev topic:<name>` | uncommitted diff | qMin -> Phase A -> exhaustive 3-pass **with agent roster filtered to topic-relevant agents** (intersect each pass's normal roster with the topic table in `/rev` SKILL.md). Use when you want exhaustive *depth* but only the chosen *lens* (security / db / perf / ml / tests). |
-| `/qRev fast` | uncommitted diff | qMin -> Phase A only, skip Phase B (no agent fleet) |
-| `/qRev branch` | `git diff main..HEAD` files | qMin -> Phase A -> exhaustive 3-pass — for end-of-branch review before merge |
-| `/qRev full` | whole repo (cap ~150 files) | qMin (on uncommitted diff) -> Phase A -> exhaustive 3-pass — for major-release / hostile-takeover audits |
+| `/qRev` | uncommitted diff (staged + unstaged) | qMin -> Phase A -> full 3-pass fleet |
+| `/qRev <path>` | uncommitted diff ∩ files under `<path>` | qMin -> Phase A -> full 3-pass fleet |
+| `/qRev PR#<n>` | `gh pr diff <n>` file list | qMin -> Phase A -> full 3-pass fleet |
+| `/qRev topic:<name>` | uncommitted diff | qMin -> Phase A -> full 3-pass fleet, **complete roster unchanged**, with the named lens (security / db / perf / ml / tests) set as the priority emphasis and surfaced first in the report. Topic changes *emphasis only*, never the number of agents. |
+| `/qRev branch` | `git diff main..HEAD` files | qMin -> Phase A -> full 3-pass fleet — for end-of-branch review before merge |
+| `/qRev full` | whole repo (cap ~150 files) | qMin (on uncommitted diff) -> Phase A -> full 3-pass fleet — for major-release / hostile-takeover audits |
 | `/qRev project` | whole project's useful code, **subsystem by subsystem** (no ~150-file cap) | **Routes to the `qRev-project` skill** (read `~/.claude/skills/qRev-project/SKILL.md`). Context-safe map-reduce: each subsystem reviewed by a delegated subagent fleet in its own context; writes a persistent architecture map (`docs/architecture/`) + an aggregated P0–P3 punch-list (`exclude/SYSTEM_STRATEGIES/qrev-project/`). Accepts `LABEL:path;path, ...` subsystem args, and `fast` / `topic:<name>` to lighten depth. Use for whole-repo onboarding / periodic systematic sweeps. |
 
 `/qRev full` vs `/qRev project`: `full` is a single-context pass capped at ~150 files (fast, can overflow on a big repo); `project` is the map-reduce, no-cap, subsystem-by-subsystem deep sweep for large/monorepo codebases and also emits the durable architecture map. Reach for `project` when the repo is too big for `full` or when you want the persistent map.
 
-If the user combines incompatible args (e.g. `/qRev topic:security branch`), apply both: scope = `branch` files, topic-filter on the agent roster, exhaustive mode. Tell the user one line about how it was interpreted.
+If the user combines args (e.g. `/qRev topic:security branch`), apply both: scope = `branch` files, and topic = `security` emphasis on top of the **full** roster (the roster is never narrowed). Tell the user one line about how it was interpreted.
 
 ## Output
 

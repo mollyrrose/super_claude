@@ -75,6 +75,13 @@ the point. Do not repeat points already in the ledger.
 Output ONLY the JSON object. No prose before or after."""
 
 
+class _BudgetExhausted(Exception):
+    """Raised when z.ai rejects the call for billing/quota reasons (HTTP 402,
+    429, or a balance/quota error code like 1113 in the body). Signals main()
+    to retry on the FREE model instead of muting, so a dead paid balance does
+    not stop the round."""
+
+
 # --- pure helpers (unit-testable, no network) -----------------------------
 
 def api_key() -> str:
@@ -224,7 +231,22 @@ def call_glm(key: str, model: str, task: str, plan: str, ledger: list) -> dict:
         with urllib.request.urlopen(req, timeout=120) as resp:
             body = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        sys.stderr.write(f"glm_critic: HTTP {e.code} — {e.read().decode('utf-8','replace')}\n")
+        body_text = e.read().decode("utf-8", "replace")
+        low = body_text.lower()
+        # Budget/quota exhaustion -> signal main() to retry on the free model.
+        # z.ai uses 402/429 and balance error codes (e.g. 1113); match keywords
+        # in EN and ZH so a depleted paid balance falls back instead of stopping.
+        if (
+            e.code in (402, 429)
+            or "1113" in body_text
+            or any(k in low for k in ("insufficient", "balance", "quota", "arrears"))
+            # z.ai may also word the balance/arrears error in Chinese, but the
+            # numeric code 1113 and HTTP 402/429 above already catch those
+            # responses, so no non-ASCII literals are needed here (keeps the
+            # source ASCII-clean per the repo's no-non-ASCII-in-code rule).
+        ):
+            raise _BudgetExhausted(body_text)
+        sys.stderr.write(f"glm_critic: HTTP {e.code} — {body_text}\n")
         sys.exit(2)
     except urllib.error.URLError as e:
         sys.stderr.write(f"glm_critic: network error — {e}\n")
@@ -259,8 +281,33 @@ def main() -> None:
     plan = req_in.get("plan", "")
     ledger = req_in.get("ledger", [])
     model = req_in.get("model") or os.environ.get("GLM_MODEL") or discover_model(key)
+    free_model = os.environ.get("GLM_FREE_MODEL") or FREE_DEFAULT_MODEL
 
-    verdict = call_glm(key, model, task, plan, ledger)
+    try:
+        verdict = call_glm(key, model, task, plan, ledger)
+    except _BudgetExhausted:
+        # Paid balance/quota is dead. Per the user's policy, do NOT stop the
+        # round — retry on the FREE model (glm-4-flash), which is a separate
+        # quota bucket on the same key. Disable with QPLAN_GLM_NO_FREE_FALLBACK=1.
+        if os.environ.get("QPLAN_GLM_NO_FREE_FALLBACK") == "1" or model == free_model:
+            sys.stderr.write(
+                "glm_critic: budget exhausted; free fallback disabled or already "
+                "on the free model. Lens muted.\n"
+            )
+            sys.exit(2)
+        sys.stderr.write(
+            f"glm_critic: paid budget/quota exhausted — falling back to the free "
+            f"model {free_model}.\n"
+        )
+        try:
+            verdict = call_glm(key, free_model, task, plan, ledger)
+        except _BudgetExhausted:
+            sys.stderr.write(
+                "glm_critic: free model also rejected (budget/limit). Lens muted.\n"
+            )
+            sys.exit(2)
+        model = free_model
+
     verdict["provider"] = "glm"
     verdict["model"] = model
     sys.stdout.write(json.dumps(verdict, ensure_ascii=False, indent=2))

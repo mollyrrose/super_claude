@@ -58,6 +58,13 @@ QCLOSE_REMAIN_PCT = int(os.environ.get("CC_BUDGET_QCLOSE_PCT", "18"))
 QUPD_REMAIN_PCT = int(os.environ.get("CC_BUDGET_QUPD_PCT", "35"))
 QUPD_REDO_DELTA = int(os.environ.get("CC_BUDGET_QUPD_REDO_DELTA", "15"))
 QUPD_DISABLE = os.environ.get("CC_BUDGET_QUPD_DISABLE", "").strip() not in ("", "0", "false", "False")
+# Master kill switch: CC_BUDGET_GATE_DISABLE=1 silences EVERY tier (soft,
+# qClose handoff nudge, and qUpd flush) -- the whole gate becomes a no-op that
+# never injects additionalContext. Use when the periodic "context almost full,
+# run /qClose before the lossy auto-compact" warnings are unwanted. Re-enable by
+# removing the env var. (Auto-compact still runs; you just lose the precise
+# /qClose handoff nudge before it -- and auto-compact IS lossy, it summarises.)
+GATE_DISABLE = os.environ.get("CC_BUDGET_GATE_DISABLE", "").strip() not in ("", "0", "false", "False")
 QUPD_STATE_PATH = os.environ.get("CC_BUDGET_QUPD_STATE", "").strip() or os.path.expanduser(
     "~/.claude/.context_qupd_flush_state.json"
 )
@@ -362,6 +369,8 @@ def _build_additional_context(remain_pct: int, est_task_pct: int, est_after_pct:
 
 
 def main() -> int:
+    if GATE_DISABLE:
+        return 0
     payload = _read_payload()
     prompt = _extract_prompt(payload)
     if not prompt.strip():

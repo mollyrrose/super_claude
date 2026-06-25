@@ -21,14 +21,28 @@ in ~/.claude/.qplan_openai_model_cache.json for CACHE_TTL_HOURS to avoid
 hitting /v1/models on every critic round. Force a refresh with the env var
 QPLAN_OPENAI_MODEL_REFRESH=1 or by deleting the cache file.
 
-Fails loud (non-zero exit + stderr message) if OPENAI_API_KEY is missing or
-the chat completion call errors. Does NOT fall back to a stub or to claude
-— provider distinguishability is the whole point of the comparison. The
-/v1/models lookup is the only soft-fail path: if it errors, the script
-falls back to a stale cache and then to HARD_FALLBACK_MODEL, because losing
-auto-discovery should not kill an in-flight planning round.
+Two backends, picked by the `backend` key on stdin (or QPLAN_OPENAI_BACKEND
+env), default "api":
 
-Stdlib only. No `openai` package install needed.
+  - "api"     — calls the OpenAI HTTP API. Needs OPENAI_API_KEY. Fails loud
+                (non-zero exit + stderr) if the key is missing or the chat
+                call errors. Does NOT fall back to a stub or to claude —
+                provider distinguishability is the point. The /v1/models
+                lookup is the only soft-fail path: on error it falls back to
+                a stale cache then HARD_FALLBACK_MODEL.
+  - "browser" — drives the logged-in ChatGPT WEB session via Playwright, so
+                it needs NO OPENAI_API_KEY (it rides the user's ChatGPT
+                subscription). One-time setup: `python openai_critic.py
+                --login`. Honest trade-offs, accepted by the user: automating
+                the ChatGPT web UI is against OpenAI's ToS, it is brittle (UI
+                / Cloudflare changes break it), and it is slower than the API.
+                Any failure (Playwright missing, not logged in, selector
+                drift, timeout) exits 2 with a clear message so the qPlan
+                panel just MUTES this lens instead of crashing the round.
+
+Stdlib only for the "api" backend (no `openai` package needed). The
+"browser" backend additionally needs Playwright: `pip install playwright`
+then `playwright install chromium`.
 """
 
 import json
@@ -72,6 +86,13 @@ semantic duplicates and the round will be wasted. If you find yourself
 rephrasing a prior point, omit it.
 
 Output ONLY the JSON. No prose before or after."""
+
+
+class _BudgetExhausted(Exception):
+    """Raised when the OpenAI API rejects the call for billing/quota reasons
+    (HTTP 402, or 429 with insufficient_quota) — distinct from a transient
+    TPM rate-limit. Signals main() to fall back to the browser backend rather
+    than muting the lens, so a dead API balance does not stop the round."""
 
 
 # --- Model auto-discovery -------------------------------------------------
@@ -272,6 +293,17 @@ def call_openai(
             body = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         body_text = e.read().decode("utf-8", "replace")
+        # Budget/quota exhaustion is NOT a transient rate-limit: chunk-splitting
+        # cannot help (every retry 429s on a $0 balance). Detect it and signal
+        # main() to fall back to the browser backend so a dead balance does not
+        # stop the planning round. 402 = Payment Required; 429 +
+        # insufficient_quota = billing hard-stop (vs 429 TPM throttle below).
+        _low = body_text.lower()
+        if e.code == 402 or (
+            e.code == 429
+            and ("insufficient_quota" in _low or "exceeded your current quota" in _low)
+        ):
+            raise _BudgetExhausted(body_text)
         # 2026-06-12: TPM caps differ per model (gpt-5.5 chat ~50K, gpt-4o
         # 30K). On 429, split the plan and retry per chunk. Same task and
         # ledger ride along with each chunk so the critic still has full
@@ -340,7 +372,234 @@ def call_openai(
         sys.exit(2)
 
 
+# --- Browser backend (no API key — drives the logged-in ChatGPT web UI) ---
+#
+# This path automates the ChatGPT web session instead of calling the API, so
+# it needs NO OPENAI_API_KEY — it rides the user's existing ChatGPT
+# subscription. Trade-offs (documented, accepted by the user): automating the
+# ChatGPT web UI is against OpenAI's ToS, it is brittle (UI/selector changes
+# and Cloudflare bot-checks can break it), and it is slower than the API.
+#
+# One-time setup: run `python openai_critic.py --login` once to open a headed
+# browser and log in; the session persists in BROWSER_PROFILE_DIR and is
+# reused on every later call. Needs Playwright: `pip install playwright` then
+# `playwright install chromium`.
+
+# Profile dir is overridable (kill switch / hermetic tests) via env.
+BROWSER_PROFILE_DIR = Path(
+    os.environ.get(
+        "QPLAN_CHATGPT_PROFILE_DIR",
+        str(Path.home() / ".claude" / ".qplan_chatgpt_profile"),
+    )
+)
+CHATGPT_URL = "https://chatgpt.com/"
+# Selectors tried in order — UI-drift fallback chains.
+_COMPOSER_SELECTORS = ("#prompt-textarea", "div[contenteditable='true']", "textarea")
+_ASSISTANT_SELECTOR = "[data-message-author-role='assistant']"
+_STOP_BUTTON_SELECTORS = ("[data-testid='stop-button']", "button[aria-label*='Stop']")
+
+
+def _import_playwright():
+    """Lazy import so the api backend + smoketest never need Playwright."""
+    try:
+        from playwright.sync_api import sync_playwright  # noqa: E402
+
+        return sync_playwright
+    except Exception:  # ImportError or a partial/broken install
+        sys.stderr.write(
+            "openai_critic[browser]: Playwright not installed. Run "
+            "`pip install playwright` then `playwright install chromium`. "
+            "Lens muted for this round.\n"
+        )
+        sys.exit(2)
+
+
+def _strip_json_fences(text: str) -> str:
+    """ChatGPT often wraps JSON in ```json fences or prose — extract the JSON."""
+    t = text.strip()
+    m = re.search(r"```(?:json)?\s*(.+?)```", t, re.DOTALL)
+    if m:
+        return m.group(1).strip()
+    i, j = t.find("{"), t.rfind("}")
+    if i != -1 and j != -1 and j > i:
+        return t[i : j + 1]
+    return t
+
+
+def _looks_logged_in(page) -> bool:
+    for sel in _COMPOSER_SELECTORS:
+        try:
+            if page.locator(sel).count() > 0:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _is_generating(page) -> bool:
+    for sel in _STOP_BUTTON_SELECTORS:
+        try:
+            if page.locator(sel).count() > 0:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _wait_for_answer(
+    page, prior_count: int, timeout_s: int = 240, stable_s: float = 2.5
+) -> str:
+    """Wait until a NEW assistant message appears and its text stabilises."""
+    deadline = time.time() + timeout_s
+    last_text = ""
+    stable_since = None
+    while time.time() < deadline:
+        msgs = page.locator(_ASSISTANT_SELECTOR)
+        try:
+            count = msgs.count()
+        except Exception:
+            count = 0
+        if count > prior_count:
+            try:
+                cur = msgs.nth(count - 1).inner_text().strip()
+            except Exception:
+                cur = ""
+            if cur and cur == last_text and not _is_generating(page):
+                if stable_since and (time.time() - stable_since) >= stable_s:
+                    return cur
+            else:
+                last_text = cur
+                stable_since = time.time()
+        time.sleep(0.5)
+    if last_text:
+        return last_text
+    sys.stderr.write(
+        "openai_critic[browser]: timed out waiting for response. Lens muted.\n"
+    )
+    sys.exit(2)
+
+
+def do_login() -> None:
+    """One-time interactive login: opens a headed browser to ChatGPT and waits
+    until the composer is visible (logged in), persisting the session."""
+    sync_playwright = _import_playwright()
+    BROWSER_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+    ok = False
+    with sync_playwright() as p:
+        ctx = p.chromium.launch_persistent_context(
+            str(BROWSER_PROFILE_DIR), headless=False
+        )
+        try:
+            page = ctx.pages[0] if ctx.pages else ctx.new_page()
+            page.goto(CHATGPT_URL, timeout=60000)
+            sys.stderr.write(
+                "openai_critic[browser]: log in to ChatGPT in the opened "
+                "window. Waiting up to 5 min for the composer to appear...\n"
+            )
+            for _ in range(300):  # ~5 min at 1s poll
+                if _looks_logged_in(page):
+                    ok = True
+                    break
+                time.sleep(1)
+        finally:
+            ctx.close()
+    if ok:
+        sys.stderr.write("openai_critic[browser]: login saved.\n")
+        sys.exit(0)
+    sys.stderr.write("openai_critic[browser]: timed out waiting for login.\n")
+    sys.exit(2)
+
+
+def call_openai_browser(task: str, plan: str, ledger: list) -> dict:
+    sync_playwright = _import_playwright()
+    if not BROWSER_PROFILE_DIR.exists():
+        sys.stderr.write(
+            "openai_critic[browser]: no saved session. Run "
+            "`python openai_critic.py --login` once. Lens muted.\n"
+        )
+        sys.exit(2)
+    headless = os.environ.get("QPLAN_OPENAI_BROWSER_HEADLESS") == "1"
+    message = (
+        CRITIC_PROMPT
+        + "\n\nINPUT (task, plan, ledger as JSON):\n"
+        + json.dumps(
+            {"task": task, "plan": plan, "ledger": ledger}, ensure_ascii=False
+        )
+        + "\n\nReturn ONLY the JSON verdict described above."
+    )
+    with sync_playwright() as p:
+        ctx = p.chromium.launch_persistent_context(
+            str(BROWSER_PROFILE_DIR), headless=headless
+        )
+        try:
+            page = ctx.pages[0] if ctx.pages else ctx.new_page()
+            page.goto(CHATGPT_URL, timeout=60000)
+            if not _looks_logged_in(page):
+                sys.stderr.write(
+                    "openai_critic[browser]: session not logged in (expired?). "
+                    "Re-run `--login`. Lens muted.\n"
+                )
+                sys.exit(2)
+            composer = None
+            for sel in _COMPOSER_SELECTORS:
+                loc = page.locator(sel).first
+                try:
+                    if loc.count() > 0:
+                        composer = loc
+                        break
+                except Exception:
+                    continue
+            if composer is None:
+                sys.stderr.write(
+                    "openai_critic[browser]: composer not found (UI drift). "
+                    "Lens muted.\n"
+                )
+                sys.exit(2)
+            prior = page.locator(_ASSISTANT_SELECTOR).count()
+            composer.click()
+            page.keyboard.insert_text(message)
+            page.keyboard.press("Enter")
+            text = _wait_for_answer(page, prior)
+        finally:
+            ctx.close()
+    return json.loads(_strip_json_fences(text))
+
+
 def main() -> None:
+    if "--login" in sys.argv[1:]:
+        do_login()
+        return
+
+    try:
+        req_in = json.loads(sys.stdin.read())
+    except json.JSONDecodeError as e:
+        sys.stderr.write(f"openai_critic: bad JSON on stdin — {e}\n")
+        sys.exit(2)
+
+    backend = (
+        req_in.get("backend") or os.environ.get("QPLAN_OPENAI_BACKEND") or "api"
+    ).lower()
+    task = req_in.get("task", "")
+    plan = req_in.get("plan", "")
+    ledger = req_in.get("ledger", [])
+
+    if backend == "browser":
+        try:
+            verdict = call_openai_browser(task, plan, ledger)
+        except json.JSONDecodeError as e:
+            sys.stderr.write(
+                "openai_critic[browser]: ChatGPT reply was not valid JSON "
+                f"({e}). Lens muted.\n"
+            )
+            sys.exit(2)
+        verdict["provider"] = "openai"
+        verdict["model"] = "chatgpt-web (browser session)"
+        verdict["backend"] = "browser"
+        sys.stdout.write(json.dumps(verdict, ensure_ascii=False, indent=2))
+        sys.stdout.write("\n")
+        return
+
+    # --- api backend (default) ---
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         sys.stderr.write(
@@ -350,19 +609,44 @@ def main() -> None:
         )
         sys.exit(2)
 
-    try:
-        req_in = json.loads(sys.stdin.read())
-    except json.JSONDecodeError as e:
-        sys.stderr.write(f"openai_critic: bad JSON on stdin — {e}\n")
-        sys.exit(2)
-
-    task = req_in.get("task", "")
-    plan = req_in.get("plan", "")
-    ledger = req_in.get("ledger", [])
+    # stdin (task/plan/ledger) was already read at the top of main().
     # Explicit override locks the model; otherwise auto-discover.
     model = req_in.get("model") or discover_model(api_key)
 
-    verdict = call_openai(api_key, model, task, plan, ledger)
+    try:
+        verdict = call_openai(api_key, model, task, plan, ledger)
+    except _BudgetExhausted:
+        # The key is valid but its balance/quota is dead. Per the user's policy,
+        # do NOT stop the round — fall back to the browser (ChatGPT web session),
+        # which rides the subscription and needs no balance. Disable this with
+        # QPLAN_OPENAI_NO_BROWSER_FALLBACK=1 (then it just mutes the lens).
+        if os.environ.get("QPLAN_OPENAI_NO_BROWSER_FALLBACK") == "1":
+            sys.stderr.write(
+                "openai_critic: API budget exhausted and browser fallback "
+                "disabled (QPLAN_OPENAI_NO_BROWSER_FALLBACK=1). Lens muted.\n"
+            )
+            sys.exit(2)
+        sys.stderr.write(
+            "openai_critic: API budget/quota exhausted — falling back to the "
+            "browser backend (ChatGPT web session). Run `--login` once if it "
+            "mutes for not being logged in.\n"
+        )
+        try:
+            verdict = call_openai_browser(task, plan, ledger)
+        except json.JSONDecodeError as je:
+            sys.stderr.write(
+                "openai_critic[browser-fallback]: ChatGPT reply was not valid "
+                f"JSON ({je}). Lens muted.\n"
+            )
+            sys.exit(2)
+        verdict["provider"] = "openai"
+        verdict["model"] = "chatgpt-web (browser fallback after budget)"
+        verdict["backend"] = "browser"
+        verdict["chunks_submitted"] = verdict.pop("_chunks_submitted", 1)
+        sys.stdout.write(json.dumps(verdict, ensure_ascii=False, indent=2))
+        sys.stdout.write("\n")
+        return
+
     verdict["provider"] = "openai"
     verdict["model"] = model
     # Surface chunk count so the caller can tell the plan was split.
