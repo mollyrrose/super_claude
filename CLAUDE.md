@@ -86,7 +86,7 @@ UNCHANGED -- they still run standalone and their `*_smoketest.py` still pass.
   a stderr message) propagates: the dispatcher re-emits that stderr and exits 2.
 - `UserPromptSubmit` -> `hook_dispatch.py UserPromptSubmit`, which runs
   `curator_prompt_hook.py`, `smart_router_prompt_hook.py`, `context_budget_gate.py`,
-  `qrev_auto_inject.py` (in that order). Each hook emits a
+  `qrev_auto_inject.py`, `coord_prompt_hook.py` (in that order). Each hook emits a
   `hookSpecificOutput.additionalContext` JSON (or nothing); the dispatcher
   extracts every hook's `additionalContext` and emits ONE merged JSON object
   (blank-line-joined, original order preserved) -- equivalent to how Claude Code
@@ -101,6 +101,10 @@ UNCHANGED -- they still run standalone and their `*_smoketest.py` still pass.
   Kill switch: `BANNER_HOOK_DISABLE=1` or remove its command from `settings.json`
   Stop (backup at `~/.claude/settings.json.bak.pre-banner-hook`).
 - `PreCompact`: `curator_precompact_hook.py` (single hook, not dispatched)
+- `SessionStart`: `coord_sessionstart_hook.py` (single hook, not dispatched) —
+  registers this window on the cross-window coordination board and injects the
+  standing protocol at startup (see "Cross-window coordination" below). Backup at
+  `~/.claude/settings.json.bak.pre-coord-sessionstart`.
 - `SessionEnd`: `rev_learn_sessionend.py` (async, single hook, not dispatched)
 
 Kill switch for the dispatcher: revert the `UserPromptSubmit`/`PostToolUse`
@@ -192,3 +196,57 @@ Same change discipline as the hooks: keep the silent no-op-on-bad-input pattern
 before trusting a change, and after editing `scripts/tokenjuice.py` copy it to
 `~/.claude/scripts/` for it to take effect. Kill switch: `TOKENJUICE_DISABLE=1`
 (or `--raw`) -> pass-through, uncompressed.
+
+## Cross-window coordination (coord.py + work.md)
+
+`scripts/coord.py` (installed to `~/.claude/scripts/`, smoketests
+`coord_smoketest.py` + `coord_prompt_hook_smoketest.py` +
+`coord_sessionstart_hook_smoketest.py`) lets concurrent Claude
+windows on the same repo self-coordinate who edits/commits/merges which files,
+and hand work off, with zero user questions. Each window registers in a shared,
+UNTRACKED journal at `~/.claude/.coord/<repo-key>/` (`state.json` truth,
+`work.md` rendered board, `.lock` cross-process lock); the key is
+`git rev-parse --git-common-dir` so all worktrees/branches of one repo share ONE
+board. The model never hand-edits `work.md` (two windows Edit-ing one file
+clobber) -- it mutates the board only via the lock-safe CLI.
+
+It is automatic at startup: `coord_sessionstart_hook.py` (wired in `settings.json`
+SessionStart) registers the window the moment Claude Code opens and injects the
+standing protocol -- so the window knows what to do with NO pasted command. The
+per-turn driver is `coord_prompt_hook.py`, wired into the
+`UserPromptSubmit` dispatcher (REGISTRY in `hook_dispatch.py`): every turn it
+refreshes this window's heartbeat, GCs silent windows (their claims free up
+after `COORD_STALE_SECONDS`, default 1800s), re-renders `work.md`, and injects a
+`[coordination]` block with the other live windows, the files they hold, and any
+requests addressed to this window. A solo window injects nothing.
+
+```
+python ~/.claude/scripts/coord.py status                         # print work.md
+python ~/.claude/scripts/coord.py claim src/foo.py               # lease a file (exit 3 on conflict)
+python ~/.claude/scripts/coord.py release src/foo.py             # free it
+python ~/.claude/scripts/coord.py request --to <sid|branch|*> --note "merge X into main"
+python ~/.claude/scripts/coord.py reply <id> --note "..."        # answer a request (-> back to asker)
+python ~/.claude/scripts/coord.py ack <id>                       # close out an answer you read
+python ~/.claude/scripts/coord.py inbox                          # compact: requests + answers for me
+python ~/.claude/scripts/coord.py resolve <id> --status done     # close a request
+python ~/.claude/scripts/coord.py done                           # leave the board (qClose does this)
+```
+
+The auto-relay loop + decision-gate (looped windows carry questions/answers
+themselves but PAUSE for the user before any irreversible op -- merge to main,
+push, rebase of live files) and the same-project scoping (coord is per-repo via
+`git-common-dir`, so windows in different projects can NEVER coordinate or
+auto-merge across each other) are documented in the global `~/.claude/CLAUDE.md`
+under "Auto-relay loop + decision-gate".
+
+The behaviour rule Claude follows (claim before editing, request for
+cross-branch handoffs, act on requests addressed to you) and the HARD LIMIT
+(coordination is PULL-based: a posted request is acted on by the target window
+on ITS next turn, not pushed instantly) live in the global `~/.claude/CLAUDE.md`
+under "Cross-window coordination (coord.py + work.md)". Same change discipline as
+the hooks: silent no-op on bad input, run both smoketests before trusting a
+change, and after editing `scripts/coord.py` / `coord_prompt_hook.py` copy them
+to `~/.claude/scripts/` for the change to take effect (the dispatcher loads the
+installed copies). Kill switch: `COORD_DISABLE=1` (CLI + hook become no-ops),
+remove `coord_prompt_hook` from `hook_dispatch.py` REGISTRY, or delete
+`~/.claude/.coord/<key>/`.

@@ -410,6 +410,83 @@ When you start a Claude session, if the project might have other concurrent wind
 
 Hooks and per-session state files in `~/.claude/` (curator queue, qrev counters, statusline baselines, ecc-session-bridge) are keyed by `session_id`, not by working-tree path. Two concurrent worktrees do not race on those. Each worktree gets its own `.claude/settings.local.json` (fresh permission prompts the first time — that's expected, not a bug).
 
+### Cross-window coordination (coord.py + work.md) — the windows self-coordinate
+
+When two or more Claude windows run on the same repo, they coordinate THEMSELVES
+through a shared, untracked journal so they never edit/commit/merge the same
+files and can hand work off — with zero questions to the user. This is the
+automated realization of the per-window TODO protocol below.
+
+How it works (`scripts/coord.py`, installed to `~/.claude/scripts/coord.py`;
+hooks `coord_prompt_hook.py` in the `UserPromptSubmit` dispatcher +
+`coord_sessionstart_hook.py` in `settings.json` SessionStart):
+
+- The journal lives OUTSIDE every worktree at `~/.claude/.coord/<repo-key>/`
+  (`state.json` = truth, `work.md` = human-readable rendered board, `.lock` =
+  cross-process lock). The key comes from `git rev-parse --git-common-dir`, so
+  ALL worktrees/branches of one repo share ONE board. Nothing is written into
+  the repo, so there are no merge conflicts and no tracked churn.
+- The `SessionStart` hook registers the window the moment Claude Code opens and
+  injects the standing protocol; the `UserPromptSubmit` hook refreshes this
+  window's heartbeat every turn, GCs windows that went silent (claims free up
+  after `COORD_STALE_SECONDS`, default 1800s), re-renders `work.md`, and injects
+  a `[coordination]` block (other live windows, files they hold, requests +
+  answers for you). A solo window injects nothing (no noise).
+- The model NEVER hand-edits `work.md` (two windows Edit-ing one file clobber);
+  it mutates the board only via the lock-safe CLI.
+
+Behaviour you (Claude) follow when other live windows or a request/answer is
+shown — no need to ask the user:
+
+1. **Before editing/committing a file no one holds, claim it:**
+   `python ~/.claude/scripts/coord.py claim <repo-relative-path> [...]`. Conflict
+   (exit 3) — a live window holds it; pick other work or post a request.
+2. **Keep your activity note current:** `coord.py beat --note "<doing>"`.
+3. **Release** when done: `coord.py release <path>` (or `release` for all).
+4. **Cross-branch handoff:** `coord.py request --to <session6|branch|*> --note
+   "cherry-pick <sha> into main"`. Target sees it next turn.
+5. **Answer a request** with `coord.py reply <id> --note "..."` (travels back to
+   the asker). Read answers to your own questions, then `coord.py ack <id>`.
+6. **At session end** (qClose covers this): `coord.py done`.
+
+### Auto-relay loop + decision-gate (so you stop being the message bus)
+
+The chosen autonomy level is **auto-relay + decision-gate**: windows carry
+questions/answers/status and do NON-destructive work on their own, but PAUSE for
+the user before any irreversible op.
+
+This is AUTOMATIC at startup — the user never pastes anything.
+`coord_sessionstart_hook.py` registers the window the moment Claude Code opens
+and injects the standing protocol; `coord_prompt_hook.py` re-injects the live
+board + inbox every turn. So from its first turn a window already handles its
+inbox, claims before editing, posts handoffs, and — WHEN OTHER LIVE WINDOWS ARE
+PRESENT — starts its own self-paced relay loop (via `/loop`) so it acts even
+while idle. You do NOT paste a `/loop` command; the window starts it itself.
+
+A solo window (no other live windows) does NOT start a loop — it just registers
+and stays silent. `COORD_AUTOLOOP=0` keeps per-turn mailbox handling but
+suppresses the self-loop start.
+
+DECISION-GATE (mandatory): a looped/auto-relay window MUST NOT, without explicit
+user approval, run `git merge`/`git rebase` onto a shared/live branch,
+`git push`, force-updates, or any destructive/irreversible command. It proposes
+the exact command back through `coord.py reply` and stops for the user.
+
+SAME-PROJECT SCOPING (mandatory): coordination and any auto-action are confined
+to ONE repo (board keyed by `git-common-dir`). Windows in different projects have
+SEPARATE boards and can never see, claim, or merge across each other.
+Cross-project auto-merge is structurally impossible through coord.
+
+HARD LIMIT (honest): coordination is PULL-based, not push. A running window
+cannot be made to act from outside. Without a loop, a posted request is picked up
+on the target window's next turn, not instantly. Conflict AVOIDANCE (leases) is
+automatic; HANDOFF is bounded by the other window taking a turn (or its loop
+interval).
+
+Kill switch: `COORD_DISABLE=1` (CLI + hooks no-op); or remove the coord hooks
+from `settings.json` / `hook_dispatch.py` REGISTRY; or delete
+`~/.claude/.coord/<key>/` to reset the board.
+
 ### Per-project TODO and INDEX files
 
 Every non-trivial project repo you work in should keep a `TODO.md` and an
