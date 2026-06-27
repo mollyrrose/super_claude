@@ -48,6 +48,16 @@ if (Test-Path $liveSettings) {
   }
   if ($uname) { $raw = $raw -replace [regex]::Escape($uname), '[USER]' }
 
+  # Tokenize non-portable absolute paths so a new machine (no D:, Python elsewhere)
+  # can fill them in at restore time.
+  #   Python interpreter   -> [PY]
+  #   this repo's root      -> [REPO]
+  $raw = $raw -replace '(?i)[A-Za-z]:\\\\[^"]*?python\.exe', '[PY]'
+  $repoEscBack = [regex]::Escape($repoRoot.Replace('\', '\\'))   # JSON form: doubled backslashes
+  $repoEscFwd  = [regex]::Escape($repoRoot.Replace('\', '/'))    # forward-slash form, if any
+  $raw = $raw -replace "(?i)$repoEscBack", '[REPO]'
+  $raw = $raw -replace "(?i)$repoEscFwd",  '[REPO]'
+
   # Safety gate: never leave a real-looking key in the mirror.
   if ($raw -match 'sk-[A-Za-z0-9_\-]{16,}') {
     throw "ABORT: a real-looking secret survived redaction; refusing to write the mirror."

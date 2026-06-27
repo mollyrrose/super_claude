@@ -14,10 +14,10 @@
   - claude_skills_backup/* -> ~/.claude/skills/ (skip with -NoSkills).
 
 .NOTES
-  Hooks/curator paths in settings.json reference the repo at D:\Projects\super_claude
-  and Python at C:\Python313 — clone/install to those paths on the new machine, or
-  edit settings.json after restore. Kill switch: don't run it (it only writes under
-  ~/.claude and backs up what it overwrites).
+  Repo root and Python path are stored as [REPO] / [PY] tokens in the mirror and
+  filled from THIS clone's location and a Python found on PATH (or $env:CLAUDE_PYTHON),
+  so no specific drive (e.g. D:) or install path is required. Kill switch: don't run
+  it (it only writes under ~/.claude and backs up what it overwrites).
 #>
 [CmdletBinding()]
 param(
@@ -41,6 +41,18 @@ if (Test-Path $src) {
   $raw   = Get-Content -LiteralPath $src -Raw
   $uname = Split-Path $env:USERPROFILE -Leaf
   $raw   = $raw.Replace('[USER]', $uname)
+
+  # [REPO] -> this clone's actual root (no hard-coded drive). JSON needs \\ for \.
+  $raw = $raw.Replace('[REPO]', $repoRoot.Replace('\', '\\'))
+
+  # [PY] -> a Python interpreter found on THIS machine (env override, then PATH).
+  $py = $env:CLAUDE_PYTHON
+  if (-not $py) { $py = (Get-Command python  -ErrorAction SilentlyContinue).Source }
+  if (-not $py) { $py = (Get-Command python3 -ErrorAction SilentlyContinue).Source }
+  if (-not $py) { $py = (Get-Command py      -ErrorAction SilentlyContinue).Source }
+  if (-not $py) { $py = 'C:\Python313\python.exe'; Write-Warning "no Python on PATH; [PY] defaulted to $py — install Python or set `$env:CLAUDE_PYTHON and re-run." }
+  if ($raw -match '\[PY\]') { Write-Host "[ok] [PY] -> $py" }
+  $raw = $raw.Replace('[PY]', $py.Replace('\', '\\'))
 
   $tokens = [regex]::Matches($raw, '\[REDACTED:([A-Za-z0-9_]+)\]') |
             ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
@@ -101,8 +113,9 @@ if (-not $NoSkills) {
 
 Write-Host ""
 Write-Host "Next steps on a new machine:"
-Write-Host "  1. Install Python 3.13 at C:\Python313 and Node.js (hooks + statusline need them)."
-Write-Host "  2. Clone this repo to D:\Projects\super_claude (paths in settings.json are absolute)."
-Write-Host "  3. Install plugins from settings.json enabledPlugins (ecc, ruflo-core) via /plugin."
-Write-Host "  4. Set API keys, then re-run so they fill in:"
+Write-Host "  1. Install Python 3.x (any drive; on PATH, or set `$env:CLAUDE_PYTHON) and Node.js."
+Write-Host "     [REPO] and [PY] are filled from THIS clone + the Python found here, so no"
+Write-Host "     specific drive (D:) or install location is required."
+Write-Host "  2. Install plugins from settings.json enabledPlugins (ecc, ruflo-core) via /plugin."
+Write-Host "  3. Set API keys, then re-run so they fill in:"
 Write-Host "       setx OPENAI_API_KEY <key>;  setx DEEPSEEK_API_KEY <key>"

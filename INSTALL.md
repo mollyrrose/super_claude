@@ -29,8 +29,10 @@ git -C D:\projects\super_claude add home_dotclaude\ ; git commit -m "chore: sync
 
 ## Rebuild on a new machine
 
-1. Install **Python 3.13** at `C:\Python313` and **Node.js** (hooks + statusline need them).
-2. Clone this repo to `D:\Projects\super_claude` (paths in `settings.json` are absolute).
+1. Install **Python 3.x** (any drive; on PATH, or set `$env:CLAUDE_PYTHON`) and **Node.js**.
+2. Clone this repo **anywhere** (no specific drive needed — `D:` is not required).
+   Restore fills `[REPO]` from the clone's own location and `[PY]` from the Python
+   it finds, so the layout is portable.
 3. Set the API keys so restore can fill them:
    ```powershell
    setx OPENAI_API_KEY   "<key>"
@@ -51,7 +53,10 @@ git -C D:\projects\super_claude add home_dotclaude\ ; git commit -m "chore: sync
 
 - `sync` redacts any `env` key whose name matches `*_API_KEY` / `*_KEY` / `*TOKEN`
   / `*SECRET` / `*PASSWORD`, so new secret env vars are sanitized automatically.
-- Hooks reference the repo at `D:\Projects\super_claude` and Python at
-  `C:\Python313`; on a different layout, edit `~/.claude/settings.json` after restore.
+- The repo root and Python path are stored as `[REPO]` / `[PY]` tokens in the
+  mirror and filled at restore time from the clone's location and a discovered
+  Python (`$env:CLAUDE_PYTHON` overrides) — so no specific drive or install path
+  is baked in. `~/.claude/...` paths use `[USER]` (the Windows profile is always
+  under `C:\Users\<user>`).
 - The GLM (z.ai) launcher and other one-off install commands live in the global
   `~/.claude/CLAUDE.md`; run them manually when needed.
