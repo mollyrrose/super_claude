@@ -180,6 +180,20 @@ When in doubt: if the terminal would sit idle until I type something,
 the banner is required. False positives are cheap; missing one means a
 window sits unused for minutes.
 
+**Automatic enforcement (Stop hook).** Because this rule is easy to forget,
+there is a `Stop` hook backstop: `scripts/banner_stop_hook.py` (installed to
+`~/.claude/scripts/banner_stop_hook.py`, wired in `settings.json` Stop alongside
+`curator_stop_hook.py`). When the final assistant message *looks like it awaits
+input* (last non-empty line ends with `?`, or an explicit approval phrase near
+the end) but does NOT contain the `USER INPUT REQUIRED` text, the hook returns a
+Stop "block" decision so the turn continues and I add the banner + the
+plain-language summary. It is deliberately conservative (strong signal only) and
+loop-guarded (caps at 2 blocks per session, then only warns), so it can never
+trap a turn. Kill switch: `BANNER_HOOK_DISABLE=1`, or remove its command from
+`settings.json` Stop (backup at `~/.claude/settings.json.bak.pre-banner-hook`).
+The hook is a backstop, not a license to rely on it — I still emit the banner
+myself; the hook only catches the misses.
+
 ### Self-check — banner and plain-language summary travel together
 
 The banner and the simplified-logic layer ("Plain-language questions to
@@ -234,6 +248,185 @@ that works instead of clever machinery.
   outward-facing actions.
 - **Kill switch.** Anything you automate must be easy to disable or revert —
   note how to turn it off at the moment you add it.
+
+## Review gates: run the review, don't ask — gate only the push
+
+When a change is big or sensitive enough that the standing pattern is to run a
+deep review (`/qRev`, or the equivalent multi-agent review) before committing,
+just RUN it. Do NOT ask permission to run the review, and do NOT offer a
+"commit without the review" menu option. The review running is the EXPECTED
+behavior you already judged warranted — turning it into a question is exactly the
+idle-waiting / over-cautious pattern the user rejects (see "Pushback expected"
+and the no-idle-waiting / decision-gate rules). The fact that the review is long
+(15-30 min) is NOT a reason to ask first; the user wants it done, not offered.
+
+Concretely, for a sensitive/large change:
+1. Run the full review automatically (no question).
+2. Fix what it surfaces.
+3. Commit may proceed automatically.
+4. The ONLY gate is the irreversible step: ASK before `push` per the existing
+   push rules (privateassociations stays guarded; one-word "push" elsewhere is
+   full authorization; `/qClose` always asks before push). Commit autonomous,
+   push gated.
+
+This mirrors the decision-gate: do the safe, expected work (the review + commit)
+on your own; stop only for the genuinely irreversible op (push). Applies to every
+window/project since it lives here in the global instructions.
+
+## Carry the task through — don't ask at sub-task boundaries
+
+Default to driving the whole task-theme to completion autonomously. Do NOT stop
+at every sub-task boundary to ask "what next?" or present an A/B/C menu of next
+steps when there is an obvious continuation. If work is already in progress and
+has a clear deferred/next part (e.g. finishing the half-done part of the thing
+you just started), JUST CONTINUE IT — finishing the current theme is the expected
+behavior, not a decision to surface.
+
+This raises the bar for asking. It does NOT cancel "Pushback expected" /
+"ask clarifying questions when ambiguous" — it narrows WHEN a question is
+warranted. Ask the user only when:
+- you are genuinely BLOCKED (missing info you cannot derive, an external
+  credential/login, a real ambiguity where the reasonable options diverge
+  materially and you cannot pick well), OR
+- the next step is a genuinely IRREVERSIBLE / outward-facing op (push, deploy,
+  delete, send) per the decision-gate, OR
+- the task-theme is actually FINISHED and there is no obvious continuation, so
+  the next direction is a true fork only the user can choose.
+
+Otherwise: pick the sensible next sub-task within the current theme and do it.
+Mid-task menus of "should I do A, B, or C" at a sub-step are the over-cautious /
+idle-waiting pattern the user rejects. Carry the theme to done, then report —
+stop only at the real gates above. Applies to every window/project (global rule).
+See "Pushback expected", "Review gates", and the decision-gate / no-idle-waiting
+rules.
+
+## Running-process progress bars in the statusline
+
+When this window runs a long job — a `/qGoal`, a `/tw` ritual, a multi-agent
+workflow, a long migration, any task that takes minutes — publish its progress
+so the statusline shows a thin progress bar (one slim bar per running process,
+stacked on their own lines below the context/quota bars, like the auto-compact
+indicator but per-process). The user wants to glance at the bar and see "roughly
+where the process is" without asking.
+
+How it works (already built in this repo):
+- The renderer is `scripts/statusline_with_weekly.js` (installed to
+  `~/.claude/scripts/statusline_with_weekly.js`): `readProcessProgress()` reads
+  `~/.claude/.process_progress/<session>.json`, `buildProcessBars()` draws one
+  slim line per active entry (`buildSlimBar`, heavy/light box-drawing strokes,
+  cyan). Done/stale (>6 h) entries are dropped automatically.
+- The writer is `scripts/process_progress.js` (installed alongside). Call it from
+  the running process to upsert/clear its own bar:
+  ```
+  node ~/.claude/scripts/process_progress.js --id <job> --label "<short desc>" --pct 42
+  node ~/.claude/scripts/process_progress.js --id <job> --label "<short desc>" --eta 600   # time-based
+  node ~/.claude/scripts/process_progress.js --id <job> --done                              # remove when finished
+  ```
+  `--session <sid>` or `$CLAUDE_SESSION_ID` keys it per window (concurrent windows
+  don't show each other's bars); with no session it falls back to a shared file.
+
+Label rule: the bar's label is the **short, human-readable description** of what
+the process is doing (e.g. "tesztek futnak", "specs review", "RNG mantra") — NOT
+the raw job id or internal process name. Multiple concurrent jobs each get their
+own labelled line.
+
+Update cadence: write progress at meaningful milestones (phase boundaries, every
+~10% of a long loop, each agent that returns in a fleet), not on a tight timer —
+the statusline only re-renders when Claude Code refreshes it. Always call
+`--done` (or `--clear-all`) when the job finishes so a stale bar doesn't linger.
+
+Kill switch: delete `~/.claude/.process_progress/` or run `process_progress.js
+--clear-all`; with no active entries the statusline renders nothing extra. The
+feature is purely additive — if the writer is never called, the statusline is
+exactly as before.
+
+This is a *display* convenience, governed by the same "lowest autonomy that
+works" rule: it's a one-line CLI call per milestone, not a background daemon.
+Don't build a separate watcher process to drive it — the running task writes its
+own progress inline.
+
+## Stuck-window watchdog + resume phrases
+
+Two separate things for the case where a window hangs, sits in a silent error
+loop, or I interrupt it with ESC and then resume.
+
+### The watchdog (external, notify-only)
+
+`scripts/window_watchdog.py` (installed to `~/.claude/scripts/window_watchdog.py`)
+is a standalone poller the user runs in a SPARE terminal. It watches the active
+session's transcript `.jsonl` mtime; if there's no activity for longer than the
+idle threshold, it alerts (sound + console line + best-effort Windows toast) so a
+stuck/hung/waiting window is noticed in seconds instead of minutes.
+
+HARD LIMIT (state this honestly, don't over-promise): an external process CANNOT
+inject "continue" into a running interactive Claude window — the window is the
+REPL and nothing outside it can type into it or resume its loop. So the watchdog
+only DETECTS and ALERTS; it never auto-unsticks anything. (It also can't tell
+"hung" from "legitimately waiting for you" — both mean "go look", which is what
+you want.) Usage:
+
+```
+python ~/.claude/scripts/window_watchdog.py                 # watch this project's newest session
+python ~/.claude/scripts/window_watchdog.py --idle 180 --poll 20
+```
+
+Kill switch: Ctrl-C, or just never start it — it changes nothing about the
+watched window. It is a one-off script you start when you want it, NOT a daemon
+or hook (lowest-autonomy rule).
+
+### Resume phrases — "mi a helyzet?" / "hogy állunk?" vs "ok, tovább"
+
+These phrases have distinct, fixed meanings when the user types them after I was
+interrupted (ESC) or stalled mid-task:
+
+- **"mi a helyzet?" / "hogy állunk?" / "hol tartunk?" / "what's the status?" /
+  "where are we?"** = pick the thread back up *from exactly where it was cut off*.
+  Re-establish what the interrupted task was (re-derive from git / the transcript
+  / the TODO if a compaction blurred it — auto-compact is lossy, see the
+  auto-compact section), then CONTINUE that task from the interruption point. Do
+  not treat it as a fresh question; treat it as "resume the in-flight work and
+  report where it stands while continuing it."
+- **"ok, tovább" / "ok, continue" / "mehet"** = proceed, but this may SKIP the
+  exact item I was interrupted on (it reads as "move on", not "go back"). If
+  there was an interrupted item, note in one line that it's being carried forward
+  or skipped, so it isn't silently dropped.
+
+The difference matters: "ok, tovább" can drop the interrupted step; the status
+phrases explicitly re-pick the interrupted step. When in doubt about which the
+user means, prefer resuming the interrupted item and say so.
+
+## Auto-compact carries context forward — so don't re-dump scope every turn (but re-verify specifics after a compact)
+
+Claude Code has **auto-compact built in**: when the context window fills, the
+conversation is summarized and the next window continues from that summary plus
+the unsummarized tail. So work is NOT lost at a compaction boundary — the task
+continues automatically. (This very setup proves it: a session that has compacted
+starts with a "PRIOR-SESSION SUMMARY" block.)
+
+Two consequences, and they pull in opposite directions — hold both:
+
+1. **Don't re-report large scope / context every turn.** If the set of files in
+   scope, the full task breakdown, or the context map is large, state it **once**
+   and thereafter refer to it briefly ("the 14-file scope from earlier"). Don't
+   re-paste the whole list each turn as a hedge against compaction — auto-compact
+   already carries the thread forward, and the repeated dumps are just noise that
+   burns context faster. Default to terse references, not full re-statements.
+
+2. **But auto-compact is LOSSY — re-verify specifics from ground truth after a
+   compact.** The thing carried across the boundary is a *summary*, not a verbatim
+   copy. Exact file lists, line numbers, intermediate state, and fine details can
+   be compressed away or blurred, and the summary itself flags prior tasks as
+   "STALE-BY-DEFAULT, verify against git/working-tree". So do **not** trust the
+   summary for precise facts: when resuming after a compaction and you need the
+   exact scope, file list, or diff state, re-derive it from ground truth
+   (`git status`, `git diff --name-only`, the per-session edit log,
+   `exclude/SYSTEM_STRATEGIES/TODO.md`) rather than quoting the summary. The
+   summary tells you *what we were doing*; git/the working tree tells you *exactly
+   where it stands now*.
+
+Net rule: lean on auto-compact for continuity (so stop the verbose per-turn
+scope/context dumps), but never lean on it for precision (so re-check the exact
+details against git after a boundary).
 
 ## Hang-prone commands: background + file output by default
 
@@ -417,74 +610,99 @@ through a shared, untracked journal so they never edit/commit/merge the same
 files and can hand work off — with zero questions to the user. This is the
 automated realization of the per-window TODO protocol below.
 
-How it works (`scripts/coord.py`, installed to `~/.claude/scripts/coord.py`;
-hooks `coord_prompt_hook.py` in the `UserPromptSubmit` dispatcher +
-`coord_sessionstart_hook.py` in `settings.json` SessionStart):
+How it works (already built — `scripts/coord.py`, installed to
+`~/.claude/scripts/coord.py`; hook `coord_prompt_hook.py` in the
+`UserPromptSubmit` dispatcher):
 
 - The journal lives OUTSIDE every worktree at `~/.claude/.coord/<repo-key>/`
   (`state.json` = truth, `work.md` = human-readable rendered board, `.lock` =
   cross-process lock). The key comes from `git rev-parse --git-common-dir`, so
   ALL worktrees/branches of one repo share ONE board. Nothing is written into
   the repo, so there are no merge conflicts and no tracked churn.
-- The `SessionStart` hook registers the window the moment Claude Code opens and
-  injects the standing protocol; the `UserPromptSubmit` hook refreshes this
-  window's heartbeat every turn, GCs windows that went silent (claims free up
-  after `COORD_STALE_SECONDS`, default 1800s), re-renders `work.md`, and injects
-  a `[coordination]` block (other live windows, files they hold, requests +
-  answers for you). A solo window injects nothing (no noise).
+- The `UserPromptSubmit` hook runs every turn with NO user action: it refreshes
+  this window's heartbeat (so it shows LIVE), GCs windows that went silent
+  (their claims free up after `COORD_STALE_SECONDS`, default 1800s), re-renders
+  `work.md`, and injects a `[coordination]` block naming the other live windows,
+  the files they hold, and any requests addressed to you. A solo window injects
+  nothing (no noise).
 - The model NEVER hand-edits `work.md` (two windows Edit-ing one file clobber);
   it mutates the board only via the lock-safe CLI.
 
-Behaviour you (Claude) follow when other live windows or a request/answer is
-shown — no need to ask the user:
+Behaviour you (Claude) follow when the injected `[coordination]` block shows
+other live windows or a request — no need to ask the user:
 
 1. **Before editing/committing a file no one holds, claim it:**
-   `python ~/.claude/scripts/coord.py claim <repo-relative-path> [...]`. Conflict
-   (exit 3) — a live window holds it; pick other work or post a request.
-2. **Keep your activity note current:** `coord.py beat --note "<doing>"`.
-3. **Release** when done: `coord.py release <path>` (or `release` for all).
-4. **Cross-branch handoff:** `coord.py request --to <session6|branch|*> --note
-   "cherry-pick <sha> into main"`. Target sees it next turn.
-5. **Answer a request** with `coord.py reply <id> --note "..."` (travels back to
-   the asker). Read answers to your own questions, then `coord.py ack <id>`.
-6. **At session end** (qClose covers this): `coord.py done`.
+   `python ~/.claude/scripts/coord.py claim <repo-relative-path> [...]`. If it
+   reports a conflict (exit 3 — a live window already holds it), pick different
+   work or post a request; do NOT edit/commit/merge another live window's claims.
+2. **Keep your activity note current** so others see what you're doing:
+   `coord.py beat --note "<short what-I'm-doing>"` (the hook also beats each turn).
+3. **Release** when done with a file: `coord.py release <path>` (or `release`
+   alone to drop all), so others can take it.
+4. **Cross-branch handoff** (e.g. "my safety fix on this branch belongs in main,
+   which another window owns"): post it —
+   `coord.py request --to <session6|branch|*> --note "cherry-pick <sha> into main"`.
+   The target window sees it in its next-turn context and acts or declines
+   (`coord.py resolve <id> --status done|declined`).
+5. **Answer a question addressed to you** with `coord.py reply <id> --note "..."`;
+   the answer travels back to the asker (shows in their `answers_for_me` next
+   turn). After you read an answer to YOUR question, `coord.py ack <id>`.
+6. **At session end** (qClose covers this): `coord.py done` to remove your window.
 
 ### Auto-relay loop + decision-gate (so you stop being the message bus)
 
-The chosen autonomy level is **auto-relay + decision-gate**: windows carry
-questions/answers/status and do NON-destructive work on their own, but PAUSE for
-the user before any irreversible op.
+The board (above) removes the COPYING of messages, but an idle target window
+still has to take a turn to read its mailbox. The chosen autonomy level is
+**auto-relay + decision-gate**: windows carry questions/answers/status and do
+NON-destructive work on their own, but PAUSE for the user before any irreversible
+op.
 
-This is AUTOMATIC at startup — the user never pastes anything.
-`coord_sessionstart_hook.py` registers the window the moment Claude Code opens
-and injects the standing protocol; `coord_prompt_hook.py` re-injects the live
-board + inbox every turn. So from its first turn a window already handles its
-inbox, claims before editing, posts handoffs, and — WHEN OTHER LIVE WINDOWS ARE
-PRESENT — starts its own self-paced relay loop (via `/loop`) so it acts even
-while idle. You do NOT paste a `/loop` command; the window starts it itself.
+This is AUTOMATIC at startup -- the user never pastes anything. The
+`coord_sessionstart_hook.py` (wired in `settings.json` SessionStart) registers
+the window the moment Claude Code opens and injects this standing protocol, and
+`coord_prompt_hook.py` re-injects the live board + inbox every turn. So from its
+first turn a window already: handles its inbox, claims before editing, posts
+handoffs, and -- WHEN OTHER LIVE WINDOWS ARE PRESENT -- starts its own self-paced
+relay loop (via the `/loop` skill) so it acts even while idle. You do NOT paste
+a `/loop` command; the window starts it itself. The loop it runs is, in effect:
 
-A solo window (no other live windows) does NOT start a loop — it just registers
-and stays silent. `COORD_AUTOLOOP=0` keeps per-turn mailbox handling but
-suppresses the self-loop start.
+    Coordination relay tick. Run `python ~/.claude/scripts/coord.py inbox`.
+    For each request addressed to me: if it is NON-destructive, do the work and
+    `coord.py reply <id> --note "<result>"`. If it needs an IRREVERSIBLE op
+    (merge to main, push, rebase/force of live files, deleting data), do NOT
+    execute it -- `coord.py reply <id> --note "proposed: <cmd>; needs user
+    approval"` and surface it to the user with the USER-INPUT banner. For each
+    answer to my own question, read it and `coord.py ack <id>`. Keep my note
+    current with `coord.py beat --note`. If nothing is pending, do nothing.
 
-DECISION-GATE (mandatory): a looped/auto-relay window MUST NOT, without explicit
-user approval, run `git merge`/`git rebase` onto a shared/live branch,
-`git push`, force-updates, or any destructive/irreversible command. It proposes
-the exact command back through `coord.py reply` and stops for the user.
+A solo window (no other live windows) does NOT start a loop -- it just registers
+and stays silent, so single-window work is unaffected. `COORD_AUTOLOOP=0` keeps
+the per-turn mailbox handling but suppresses the self-loop start.
+
+DECISION-GATE (mandatory, non-negotiable): a looped/auto-relay window MUST NOT,
+without explicit user approval, run `git merge`/`git rebase` onto a shared or
+live branch, `git push`, force-updates, or any destructive/irreversible command.
+It proposes the exact command back through `coord.py reply` and stops for the
+user. Non-destructive work (reading, analysis, drafting, answering questions,
+claiming/releasing files, posting requests) needs no gate.
 
 SAME-PROJECT SCOPING (mandatory): coordination and any auto-action are confined
-to ONE repo (board keyed by `git-common-dir`). Windows in different projects have
-SEPARATE boards and can never see, claim, or merge across each other.
-Cross-project auto-merge is structurally impossible through coord.
+to ONE repo. The board is keyed by `git rev-parse --git-common-dir`, so windows
+in different projects have SEPARATE boards and can never see, claim, or merge
+across each other. A window must never act on, merge, or touch another project's
+files via coord -- it only ever sees same-repo windows. This is structural, not
+just policy: cross-project auto-merge is impossible through coord.
 
-HARD LIMIT (honest): coordination is PULL-based, not push. A running window
-cannot be made to act from outside. Without a loop, a posted request is picked up
-on the target window's next turn, not instantly. Conflict AVOIDANCE (leases) is
-automatic; HANDOFF is bounded by the other window taking a turn (or its loop
-interval).
+HARD LIMIT (be honest, do not over-promise): coordination is PULL-based, not
+push. A running window cannot be made to act from outside (same wall
+`window_watchdog.py` documents). Without a loop, a posted request is picked up by
+the target window on ITS next turn, not instantly; a fully idle window won't act
+until its user prompts it OR it is running the relay loop above. Conflict
+AVOIDANCE (leases) is automatic; task HANDOFF is bounded by the other window
+taking a turn (or its loop interval).
 
-Kill switch: `COORD_DISABLE=1` (CLI + hooks no-op); or remove the coord hooks
-from `settings.json` / `hook_dispatch.py` REGISTRY; or delete
+Kill switch: `COORD_DISABLE=1` makes the CLI and the hook no-ops; or remove
+`coord_prompt_hook` from `hook_dispatch.py` REGISTRY; or delete
 `~/.claude/.coord/<key>/` to reset the board.
 
 ### Per-project TODO and INDEX files

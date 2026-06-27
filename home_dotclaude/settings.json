@@ -1,8 +1,9 @@
 {
   "env": {
-    "OPENAI_API_KEY": "[REDACTED — real key only in live ~/.claude/settings.json]",
-    "DEEPSEEK_API_KEY": "[REDACTED — real key only in live ~/.claude/settings.json]",
-    "QREV_CRITIC_PROVIDERS": "claude,openai,deepseek"
+    "OPENAI_API_KEY": "[REDACTED:OPENAI_API_KEY]",
+    "DEEPSEEK_API_KEY": "[REDACTED:DEEPSEEK_API_KEY]",
+    "QREV_CRITIC_PROVIDERS": "claude,openai,deepseek",
+    "ECC_DISABLED_HOOKS": "stop:format-typecheck"
   },
   "permissions": {
     "allow": [
@@ -107,6 +108,18 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Python313\\python.exe\" \"C:\\Users\\[USER]\\.claude\\scripts\\coord_sessionstart_hook.py\"",
+            "timeout": 15
+          }
+        ]
+      }
     ]
   },
   "statusLine": {
@@ -141,5 +154,6 @@
   "autoUpdatesChannel": "latest",
   "theme": "dark",
   "autoCompactEnabled": true,
-  "skipAutoPermissionPrompt": true
+  "skipAutoPermissionPrompt": true,
+  "tui": "fullscreen"
 }
