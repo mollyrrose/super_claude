@@ -85,12 +85,11 @@ check(state["sessA"]["blocks"] == 0, "counter resets on clean turn")
 action, reason, state = bh.decide("All done.", "sessB", state)
 check(action == "allow", "allows plain statement")
 
-# --- loop guard: cap blocks then warn ---
+# --- loop guard: cap blocks then warn (cap is 1: one nudge, then warn only) ---
 state = {}
 a1, _, state = bh.decide("Pick one?", "sessC", state)
 a2, _, state = bh.decide("Pick one?", "sessC", state)
-a3, _, state = bh.decide("Pick one?", "sessC", state)
-check(a1 == "block" and a2 == "block" and a3 == "warn", "block cap -> warn after 2")
+check(a1 == "block" and a2 == "warn", "block cap -> warn after 1")
 
 # --- extract_last_assistant_text from a transcript ---
 with tempfile.TemporaryDirectory() as d:

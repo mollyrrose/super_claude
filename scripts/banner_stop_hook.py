@@ -15,8 +15,14 @@ Design constraints (all load-bearing):
   (last non-empty line ends with '?', or an explicit approval phrase near the
   end) AND the banner being absent.
 - LOOP GUARD. State in ~/.claude/.banner_hook_state.json caps blocks per session
-  (default 2). After the cap, the hook stops blocking and only warns on stderr —
+  (default 1). After the cap, the hook stops blocking and only warns on stderr —
   so a model that keeps omitting the banner can never trap the turn in a loop.
+  The cap is 1 (not 2) on purpose: one forced reminder is enough — the model
+  adds the banner on the first nudge in the normal case, so a single block
+  resolves it. A SECOND block only ever fires when the banner already looks
+  missing again, which in practice is a transcript-flush race (banner present
+  but not yet on disk), and re-blocking there just duplicates the banner. Capping
+  at 1 keeps the backstop while preventing the 3x-banner spam that motivated it.
 - SILENT NO-OP on missing/malformed stdin or any internal error (same invariant
   as every other hook here): a broken hook must never wedge the session. Always
   exit 0.
@@ -37,7 +43,7 @@ import sys
 from pathlib import Path
 
 BANNER_TEXT = "USER INPUT REQUIRED"
-MAX_BLOCKS_PER_SESSION = 2
+MAX_BLOCKS_PER_SESSION = 1
 STATE_FILENAME = ".banner_hook_state.json"
 
 # Imperative / interrogative approval phrases that genuinely signal an awaiting

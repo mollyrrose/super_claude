@@ -453,7 +453,18 @@ before), do BOTH:
 Quick/cheap commands (`ls`, `git status`, a single `grep`) stay inline -- this is
 for the hang-prone ones. To find WHICH tool froze when it does happen, read the
 transcript's last `tool_use` that has no matching `tool_result` (works for any
-tool type, not just Bash).
+tool type, not just Bash). `scripts/stall_scan.py` (installed to
+`~/.claude/scripts/stall_scan.py`, smoketest `stall_scan_smoketest.py`) automates
+exactly that: a one-shot, READ-ONLY scan of the newest session transcript that
+lists every swallowed (resultless) tool call -- tool name, the file/command it was
+acting on, and the transcript line -- so you know precisely what to re-verify and
+re-apply after an internal-error glitch. The most recent unmatched call is flagged
+as likely in-flight (not a real stall) and excluded from the stall count unless
+`--all`. Run `python ~/.claude/scripts/stall_scan.py` (add `--json`, or
+`--transcript PATH` for a specific session). Same hard limit as everything else
+here: this only DETECTS after the fact -- a swallowed result cannot be intercepted
+or auto-marked in real time by any hook, and nothing outside the window can resume
+a frozen REPL.
 
 Kill switch: this is a CONVENTION, not automation -- ignore it for a given
 command, or set `LOAD_RETRY_DISABLE=1` to make `load_retry_runner.py` a
