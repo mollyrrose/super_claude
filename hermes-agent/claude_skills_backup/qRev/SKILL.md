@@ -234,6 +234,32 @@ $env:DEEPSEEK_API_KEY = "sk-..."
 
 If one of the two paid keys is missing or its account is empty, that provider gets silently skipped and `/qRev` continues with the remaining ones — exactly the behaviour the user asked for. No prompts, no blockers, no half-finished runs.
 
+## Radar gate (optional, strict, kill-switched)
+
+Before emitting the final P0/P1/P2/P3 punch-list, unless `AI_RADAR_DISABLE=1` or the AI Radar bundle (`~/.claude/okf/ai-radar/`) is absent, run the `/radar-check` gate logic against the diff and the project's deps/model-pins/patterns. If the radar has a material, high-confidence `superseded` hit relevant to what is being committed (a dependency with a newer/safer release, a pattern the radar marks as replaced, an outdated model pin), add it as a single advisory `[radar]` note in the report — typically P2/P3 unless it is a security-grade supersede (then P1). Strict threshold and no-nagging apply: at most a line or two, silence when nothing strongly qualifies, never block the commit, never auto-change anything. The radar note is advisory like the rest of the punch-list — the user decides. (Offensive/red-team tools in the radar are flagged so this gate never recommends adopting them.)
+
+## Model tiering (cost control)
+
+The fleet is token-heavy by design: many parallel, fresh-context reviewers, each
+re-loading the diff + its own gathered context — a subagent-heavy run can spend
+several times a single session's tokens. That parallel-fresh-eyes cost IS the point
+of qRev; tiering trims the edges, it does not transform it.
+
+Rules when assigning models to the fleet (via each Task's `model` field):
+- **Do NOT demote judgment lenses.** correctness, security, the language reviewer,
+  framework reviewers, db, perf — these decide P0/P1 and MUST stay at the session
+  model (opus/sonnet). Putting them on haiku guts the gate's rigor.
+- **MAY demote clearly-low-stakes lenses to `model: haiku`** — pure scan/scan-report
+  roles where judgment is not the point (e.g. doc/comment/style/conventions lenses).
+  The token saving is modest and safe there.
+- This follows the global "Subagent model routing (tiering)" policy. On GLM the
+  `haiku`/`sonnet`/`opus` aliases resolve to GLM models via the launcher env mapping,
+  so the same assignment works unchanged on GLM.
+- If quota (not wall-clock) is the constraint, running lenses sequentially instead of
+  all-parallel holds fewer contexts open at once — same per-lens cost, less peak
+  concurrency, but loses qRev's parallel speed; only do this when explicitly trading
+  speed for quota.
+
 ## Do not
 
 - Do not skip Phase 0 because Phase B "covers it". qMin's lens (minimal-scope, your-intent-vs-the-diff) is different from the agent fleet's lens (cross-file consistency, project-convention drift). Both are load-bearing.

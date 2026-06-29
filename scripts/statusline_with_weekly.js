@@ -240,6 +240,7 @@ function readCurrentTask(sessionId) {
     const files = fs
       .readdirSync(todosDir)
       .filter(f => f.startsWith(safe) && f.includes('-agent-') && f.endsWith('.json'))
+      // nosemgrep: path-join-resolve-traversal -- `f` is an actual entry from fs.readdirSync(todosDir), not user input
       .map(f => ({ name: f, mtime: fs.statSync(path.join(todosDir, f)).mtime }))
       .sort((a, b) => b.mtime - a.mtime);
     if (!files.length) return '';
@@ -286,6 +287,7 @@ function readProcessProgress(sessionId) {
     const dir = _processDir();
     if (!fs.existsSync(dir)) return [];
     const safe = _safeSession(sessionId);
+    // nosemgrep: path-join-resolve-traversal -- `safe` is sanitized by _safeSession() to [A-Za-z0-9_-]; no traversal possible
     let file = safe ? path.join(dir, `${safe}.json`) : '';
     if (!file || !fs.existsSync(file)) {
       const fb = path.join(dir, '_fallback.json');

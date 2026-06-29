@@ -133,7 +133,9 @@ def repo_identity(cwd: str | None = None) -> tuple[str, str | None, str | None]:
     else:
         main_root = str(Path(cwd).resolve()) if cwd else str(Path.cwd().resolve())
         seed = main_root
-    key = hashlib.sha1(seed.lower().encode("utf-8")).hexdigest()[:12]
+    # Non-cryptographic: a short, stable directory key derived from the repo path.
+    # nosemgrep: insecure-hash-algorithm-sha1 -- usedforsecurity=False, not a security hash
+    key = hashlib.sha1(seed.lower().encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
     return key, main_root, branch
 
 
@@ -583,7 +585,8 @@ def cmd_request(args) -> int:
     def op():
         state = _load_state(d)
         reqs = state.setdefault("requests", [])
-        rid = "r" + hashlib.sha1(f"{now_iso()}{sid}{args.note}".encode()).hexdigest()[:6]
+        # nosemgrep: insecure-hash-algorithm-sha1 -- non-crypto short request id, usedforsecurity=False
+        rid = "r" + hashlib.sha1(f"{now_iso()}{sid}{args.note}".encode(), usedforsecurity=False).hexdigest()[:6]
         reqs.append({"id": rid, "t": now_iso(), "frm": sid, "to": args.to,
                      "note": args.note, "status": "open"})
         _add_event(state, f"[{sid}] -> {args.to}: {args.note}")

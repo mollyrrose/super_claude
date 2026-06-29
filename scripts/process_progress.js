@@ -58,6 +58,7 @@ function safeSession(sid) {
 
 function stateFile(sid) {
   const safe = safeSession(sid);
+  // nosemgrep: path-join-resolve-traversal -- `safe` is sanitized by safeSession() to [A-Za-z0-9_-]; no traversal possible
   return path.join(processDir(), `${safe || '_fallback'}.json`);
 }
 

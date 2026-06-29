@@ -267,6 +267,36 @@ Override defaults for the auto-review tiers in the same `env` block:
 
 ---
 
+## AI Radar (`okf/ai-radar/`)
+
+A compounding, agent-maintained knowledge bundle in the **Open Knowledge Format**
+(OKF: a directory of markdown files with YAML frontmatter) tracking "what is new /
+better in the AI world" — and flagging it where it touches your work. Source of truth
+in `okf/ai-radar/`, synced to `~/.claude/okf/ai-radar/`.
+
+- **Intake** (hybrid): `/radar-add <url|note>` (manual) and `/radar-scan [topic]`
+  (web + YouTube keyword-search & transcript + arXiv multi-modal sweep, then a lint
+  pass). Every interesting GitHub repo is **skillspector-scanned before trust**, and
+  entries are graded on a freshness/`supersedes` model.
+- **Speak-up** (strict, kill-switched): a `/radar-check` gate wired into `/qRem` and
+  `/qRev` surfaces a single high-signal `[radar]` line when the project uses something
+  the radar marks superseded — silence by default (honors no-nagging). Disable with
+  `AI_RADAR_DISABLE=1`.
+
+## `/pentest` — non-destructive security audit engine
+
+A local application-security auditor for the project you're in. Auto-maps the project,
+runs SAST + SCA + secrets + IaC on the code and (optionally) non-destructive DAST
+against a locally-launched instance, produces a P0-P3 report, and auto-fixes code-level
+findings like `/qRev`. **Hard invariant: "attack" = active DISCOVERY only, never break
+anything** — real exploitation / C2 / credential brute / relay / DoS are excluded by
+design and enforced by the fail-closed guardrail `scripts/pentest_policy.py`
+(+ `pentest_policy_smoketest.py`). Modes: `/pentest static` (code only), `/pentest`
+(code + local DAST), `/pentest remote <target>` (authorized VPN target, scope-gated).
+Kill switch `PENTEST_DISABLE=1`. The discovery-safe tool matrix lives in the AI Radar
+(`okf/ai-radar/devsec-tools/appsec-toolchain.md`); offensive frameworks (HexStrike,
+etc.) are recorded there as awareness only.
+
 ## License
 
 - Upstream Hermes-derived code (`hermes-agent/claude_code_integration/` and the `claude_skills_backup/hermes-*` skills) stays under the original Apache 2.0 license -- see [`hermes-agent/LICENSE`](hermes-agent/LICENSE).

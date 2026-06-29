@@ -540,6 +540,7 @@ def _kill_tree(proc):
 
 def run_capture(command, timeout=0):
     """Run command via shell, capture combined stdout+stderr. Returns (text, rc)."""
+    # nosemgrep: subprocess-shell-true -- `command` is the operator-provided shell command to run+compress; shell semantics required, not untrusted input
     proc = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT)
     try:

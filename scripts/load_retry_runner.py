@@ -265,6 +265,7 @@ def run_once(command, timeout):
     {rc, timed_out, duration}. Kills the whole tree on timeout so nothing is
     left hanging. stdout/stderr stream to this process's stdout/stderr."""
     start = time.time()
+    # nosemgrep: subprocess-shell-true -- `command` is the operator-provided shell command this runner exists to execute (shell semantics required); not untrusted external input
     proc = subprocess.Popen(command, shell=True)
     try:
         rc = proc.wait(timeout=timeout)
