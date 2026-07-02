@@ -497,11 +497,32 @@ to the model or an agent: `python ~/.claude/scripts/tokenjuice_condense.py
 --file big.json`, or `tokenjuice --condense -- <command>`, or
 `{"type": "condense"}` in a rule. Lazy import, silent no-op if missing.
 
-Standing token discipline (proxy-free, in priority order): (1) delegate
-multi-file reads to subagents that return conclusions, not file dumps; (2)
-pipe KNOWN-noisy commands through tokenjuice; (3) condense giant blobs before
-handing them over. These three cover the realistic savings -- no proxy or
-MITM layer is used (rejected with the headroom plugin).
+STANDING TOKEN DISCIPLINE (MANDATORY every session, both tools always in use).
+This is a STANDING RULE, not a suggestion: in EVERY session, from the first
+turn, apply tokenjuice AND condense by default as a reflex -- there is nothing
+to "start" (they are on-demand scripts, not daemons), so "always on" means the
+model applies them continuously without being asked. In priority order:
+  1. Delegate multi-file reads to subagents that return conclusions, not file
+     dumps (the biggest lever).
+  2. Pipe KNOWN-noisy shell commands through tokenjuice by default:
+     `python ~/.claude/scripts/tokenjuice.py -- <command>` (git status, build,
+     test, install, docker/kubectl listings, large greps -- anything verbose).
+  3. Condense any BIG structured/prose blob before reading it whole or handing
+     it to an agent: `python ~/.claude/scripts/tokenjuice_condense.py --file
+     <path>`, or `tokenjuice --condense -- <command>`. Measured 37-69% on
+     JSON/code/prose where the command rules alone saved 0%.
+  4. For a genuinely huge file, prefer `tokenjuice_condense.py --file X` over a
+     raw whole-file Read so the file passes through the compressor.
+Apply judgement, not blindly: skip it on already-small output, on commands whose
+EXACT bytes matter, and on interactive commands. But the DEFAULT is "use them",
+not "remember to use them". Proxy-free -- no proxy or MITM layer (rejected with
+the headroom plugin).
+
+WHY it cannot be a silent auto-interceptor (be honest): a Claude Code hook
+CANNOT rewrite a Read/Grep/MCP tool result before the model sees it (hard limit,
+below), and auto-wrapping every Bash command would break exact-output and
+interactive commands. So "always on" is realized as this model-discipline rule,
+loaded every session from this file + INDEX.md -- NOT as a background daemon.
 
 HARD LIMIT (state this honestly, same wall load_retry_runner.py / window_watchdog.py
 document): a Claude Code hook CANNOT rewrite a tool result before the model sees

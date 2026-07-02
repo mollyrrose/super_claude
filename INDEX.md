@@ -2,6 +2,28 @@
 
 Orientation map for a fresh session. For the full feature catalog see `README.md`.
 
+## Token discipline (STANDING — every session, both tools always in use)
+
+Every session, from the first turn, the model applies the token compressors by
+default as a reflex — this is a standing rule, loaded here + in `CLAUDE.md`, so a
+fresh clone of super_claude gets it automatically. There is nothing to "start"
+(they are on-demand scripts, not daemons); "always on" means the model reaches
+for them continuously without being asked:
+
+1. Delegate multi-file reads to subagents that return conclusions, not dumps.
+2. Pipe KNOWN-noisy shell commands through tokenjuice:
+   `python ~/.claude/scripts/tokenjuice.py -- <command>`.
+3. Condense BIG structured/prose blobs before reading whole or handing to an
+   agent: `python ~/.claude/scripts/tokenjuice_condense.py --file <path>` (or
+   `tokenjuice --condense -- <command>`). Measured 37-69% on JSON/code/prose.
+
+It cannot be a silent auto-interceptor (a hook cannot rewrite a Read/Grep/MCP
+tool result before the model sees it, and auto-wrapping every Bash command would
+break exact-output/interactive commands), so it is realized as this
+model-discipline rule, not a daemon. Full rule + rationale: `CLAUDE.md` "Token
+compression layer (tokenjuice)" and the global `~/.claude/CLAUDE.md` STANDING
+TOKEN DISCIPLINE block.
+
 ## What this is
 
 `super_claude` is the personal Claude Code setup: hook scripts, the curator /
