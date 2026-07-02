@@ -481,8 +481,27 @@ keeps the signal. Inspired by openhuman's "TokenJuice" (no code copied): a
 three-layer JSON rule overlay (builtin < user < project, later overrides earlier
 by rule `name`), each rule naming a command pattern + a list of reduction
 strategies (strip_ansi, fold_whitespace, dedup_lines, drop_regex, keep_regex,
-truncate, summarize_sections, html_to_markdown, shorten_urls). All strategies are
-pure rules -- no LLM call, free, private, reproducible.
+truncate, summarize_sections, html_to_markdown, shorten_urls, condense). All
+strategies are pure rules -- no LLM call, free, private, reproducible.
+
+The `condense` strategy (sibling `~/.claude/scripts/tokenjuice_condense.py`,
+smoketest `tokenjuice_condense_smoketest.py`) is the structure-aware path for
+BIG blobs, ported stdlib-only from the audited `chopratejas/headroom`
+compression package (Apache-2.0 attribution in the module docstring; the
+headroom package itself stays do-not-install per the AI Radar audit). It
+auto-detects JSON / code / log / text: JSON keeps keys/schema/ID-like values,
+code keeps imports + signatures, logs keep errors/traces/summaries with
+context, and high-entropy words (API keys, UUIDs, hashes) always survive
+squeezing. Reach for it when one huge JSON/code/log/prose blob must be handed
+to the model or an agent: `python ~/.claude/scripts/tokenjuice_condense.py
+--file big.json`, or `tokenjuice --condense -- <command>`, or
+`{"type": "condense"}` in a rule. Lazy import, silent no-op if missing.
+
+Standing token discipline (proxy-free, in priority order): (1) delegate
+multi-file reads to subagents that return conclusions, not file dumps; (2)
+pipe KNOWN-noisy commands through tokenjuice; (3) condense giant blobs before
+handing them over. These three cover the realistic savings -- no proxy or
+MITM layer is used (rejected with the headroom plugin).
 
 HARD LIMIT (state this honestly, same wall load_retry_runner.py / window_watchdog.py
 document): a Claude Code hook CANNOT rewrite a tool result before the model sees

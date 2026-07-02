@@ -179,8 +179,24 @@ overlay (builtin < user `~/.claude/tokenjuice/rules/` < project
 `./.tokenjuice/rules/`, later overrides earlier by rule `name`) strips the noise
 before it costs context. Strategies: strip_ansi, fold_whitespace, dedup_lines,
 drop_regex, keep_regex, truncate, summarize_sections, html_to_markdown,
-shorten_urls -- all pure rules, no LLM. Inspired by openhuman's "TokenJuice"; no
-code copied. Full rationale + the harness limit (a hook cannot rewrite a tool
+shorten_urls, condense -- all pure rules, no LLM. Inspired by openhuman's
+"TokenJuice"; no code copied.
+
+The `condense` strategy lives in the sibling `scripts/tokenjuice_condense.py`
+(installed alongside, smoketest `tokenjuice_condense_smoketest.py`): a
+structure-aware condenser for BIG blobs, ported (simplified, stdlib-only,
+Apache-2.0 attribution in the module docstring) from the audited
+`chopratejas/headroom` compression package -- the headroom package itself stays
+do-not-install (see `okf/ai-radar/agent-tooling/headroom.md`); only the audited
+pure-text logic was vendored. Auto-detects JSON / code / log / text: JSON keeps
+every key + schema + short/ID-like values, code keeps imports + signatures,
+logs keep errors/traces/summaries with context, and high-entropy words (API
+keys, UUIDs, hashes) always survive squeezing. Measured on a 24K-char JSON API
+dump: the command-oriented rules alone saved 0%, condense ~54% with the full
+schema intact. Use via `{"type": "condense"}` in a rule, the `--condense` CLI
+flag, or standalone: `python ~/.claude/scripts/tokenjuice_condense.py --file
+big.json`. Lazy import, silent no-op if the module is missing; same kill
+switch (`TOKENJUICE_DISABLE=1`). Full rationale + the harness limit (a hook cannot rewrite a tool
 result, so this is opt-in not automatic) and usage are in the global
 `~/.claude/CLAUDE.md` under "Token compression layer (tokenjuice)" and mirrored in
 `home_dotclaude/CLAUDE.md`.

@@ -9,6 +9,13 @@ timestamp: 2026-06-28T00:00:00Z
 
 Newest first. Each line: date — what changed.
 
+- 2026-07-02 — Headroom follow-through: synced the 2026-06-29 manual-audit text
+  from the live copy into the repo entry (agent-tooling/headroom), then ported
+  the audited compression logic into `scripts/tokenjuice_condense.py`
+  (stdlib-only; JSON schema preservation, code signature fallback, log
+  error/trace selection, entropy secret preservation, fallback detector) and
+  wired it into tokenjuice as the `condense` strategy + `--condense` flag.
+  Package itself stays do-not-install (proxy/plugin/daemon layer rejected).
 - 2026-06-29 — Token/memory-optimization assessment: added knowledge/prompt-caching
   (narrow applicability — harness already caches the main session; our critic prefix
   is sub-minimum), knowledge/attention-residuals (model-architecture, not-applicable),

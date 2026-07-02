@@ -76,6 +76,15 @@ STRATEGIES (all deterministic)
                                      dropped block (count + most-frequent prefixes)
   html_to_markdown                   lightweight tag strip -> markdown-ish text
   shorten_urls {max_len}             collapse long URLs to scheme://host/...(len)
+  condense {content_type,ratio}      structure-aware blob condense via the
+                                     sibling tokenjuice_condense.py (ported from
+                                     chopratejas/headroom, Apache-2.0): JSON keeps
+                                     keys/schema, code keeps imports+signatures,
+                                     logs keep errors/traces/summary, secrets and
+                                     UUIDs always survive. content_type: auto
+                                     (default) | json | code | log | text.
+                                     Silent no-op if the module is missing.
+                                     Also exposed as the --condense CLI flag.
 
 KILL SWITCH
 -----------
@@ -373,6 +382,39 @@ def s_html_to_markdown(text, params):
     return text.strip("\n")
 
 
+_condense_module = None
+
+
+def _get_condense_module():
+    """Lazy import of the sibling tokenjuice_condense.py. Returns the module
+    or None -- a missing/broken module makes the strategy a silent no-op,
+    never a crash (same invariant as every other strategy)."""
+    global _condense_module
+    if _condense_module is None:
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            try:
+                import tokenjuice_condense
+                _condense_module = tokenjuice_condense
+            finally:
+                sys.path.pop(0)
+        except Exception:
+            _condense_module = False
+    return _condense_module or None
+
+
+def s_condense(text, params):
+    mod = _get_condense_module()
+    if mod is None:
+        return text
+    ctype = params.get("content_type", "auto")
+    if ctype == "auto":
+        ctype = None
+    ratio = float(params.get("ratio", 0.3))
+    out, _meta = mod.condense(text, content_type=ctype, ratio=ratio)
+    return out
+
+
 def s_shorten_urls(text, params):
     max_len = int(params.get("max_len", 60))
 
@@ -399,6 +441,7 @@ STRATEGIES = {
     "summarize_sections": s_summarize_sections,
     "html_to_markdown": s_html_to_markdown,
     "shorten_urls": s_shorten_urls,
+    "condense": s_condense,
 }
 
 
@@ -601,6 +644,9 @@ def build_arg_parser():
                    help="Print a machine-readable stat line on stderr.")
     p.add_argument("--explain", action="store_true",
                    help="With --json, include the per-strategy trace.")
+    p.add_argument("--condense", action="store_true",
+                   help="Also apply the structure-aware condense strategy "
+                        "(auto-detected JSON/code/log/text) after the rules.")
     p.add_argument("--probe", action="store_true",
                    help="Show which rules match --for/<command>, then exit 0.")
     p.add_argument("--list-rules", action="store_true",
@@ -654,6 +700,11 @@ def main(argv=None):
         return 0 if rc is None else rc
 
     compressed, trace = compress(original, rules, subject)
+    if args.condense:
+        before = len(compressed)
+        compressed = s_condense(compressed, {"content_type": "auto"})
+        trace.append({"rule": "--condense", "strategy": "condense",
+                      "chars_before": before, "chars_after": len(compressed)})
     sys.stdout.write(compressed)
     if compressed and not compressed.endswith("\n"):
         sys.stdout.write("\n")
