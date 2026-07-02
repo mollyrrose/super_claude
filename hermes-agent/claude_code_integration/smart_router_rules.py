@@ -226,23 +226,64 @@ def format_suggestion(suggestion: Suggestion) -> str:
 # architectural limit), and a /model switch is manual. The conversation
 # transcript is model-agnostic, so the supported way to run a given phase on a
 # different-strength model is to DELEGATE it to a subagent that carries its own
-# `model` (Agent/Task `model: opus|sonnet|haiku|fable`). This router classifies
+# `model` (Agent/Task `model: fable|opus|sonnet|haiku`). This router classifies
 # the prompt's phase and recommends the subagent model to use when delegating;
 # the main session keeps the full context regardless of what the subagent runs.
 #
-# Capability ladder (ascending): haiku < sonnet < opus. The recommendation bakes
-# in a one-tier safety margin over the bare minimum for planning and
-# implementation work, and ties break upward ("one version higher than
-# needed"), capped at opus. Mechanical work stays on haiku. Fable is a separate
-# fast line and is intentionally not placed on this ladder.
+# Capability ladder (ascending): haiku < sonnet < opus < fable.
+#   haiku  (claude-haiku-4-5)   -- mechanical / near-deterministic.
+#   sonnet (claude-sonnet-4-6)  -- standard coding: implementation, refactor,
+#                                  tests, bug fixes. Strong + cost-efficient at
+#                                  code benchmarks (SWE-bench-class), so it is
+#                                  the DEFAULT for build/fix work.
+#   opus   (claude-opus-4-8)    -- high-tier judgment: architecture, design,
+#                                  audit, deep root-cause, security review,
+#                                  research. The workhorse high tier.
+#   fable  (claude-fable-5)     -- Mythos-class, ABOVE opus; the most capable
+#                                  generally-available model. RESERVED for the
+#                                  hardest reasoning where opus is not enough:
+#                                  novel/optimal algorithm design, formal
+#                                  proofs/derivations, deep multi-constraint
+#                                  architecture, adversarial security analysis,
+#                                  frontier research synthesis.
+#
+# Policy is "the ideal model that is still SUFFICIENT for the task, not the
+# biggest" (feedback 2026-07-02): pick the LOWEST tier that clears the task and
+# break ties UPWARD by one step ("one version higher than needed"). The ceiling
+# is now `fable`, but escalation to it requires an explicit hardness signal --
+# ordinary design/audit work stays on opus so the top tier is spent only where
+# it changes the answer. Fable is NO LONGER an off-ladder "fast line"; it is the
+# top of the ladder.
+#
+# On GLM (z.ai) the aliases resolve to GLM models via the launcher env mapping;
+# `fable` maps to the GLM flagship alongside `opus` when no distinct top GLM
+# model exists, so the same routing decisions hold unchanged.
 
 
 @dataclass(frozen=True)
 class ModelTier:
-    model: str   # subagent model alias: "opus" | "sonnet" | "haiku"
+    model: str   # subagent model alias: "fable" | "opus" | "sonnet" | "haiku"
     phase: str   # human-readable phase label
     why: str     # one-line rationale surfaced to the model
 
+
+# Top tier (fable): the hardest reasoning where opus is not sufficient. Gated on
+# EXPLICIT hardness signals so the ceiling is spent only where it changes the
+# answer -- "ideal yet sufficient" means ordinary design/audit stays on opus.
+_TIER_TOP_PATTERNS = [
+    r"\b(prove|proof|derive|derivation|formal(?:ly|ise|ize)?)\b",
+    r"\b(novel|optimal|hardest|from first principles)\b.{0,30}\b(algorithm|approach|design|proof|solution)\b",
+    r"\b(algorithm|complexity)\b.{0,30}\b(design|analysis|optimal|prove|derive)\b",
+    r"\b(adversarial|threat[-\s]?model)\b.{0,30}\b(analysis|proof|design)\b",
+    r"\bdeep(?:est)? (?:research|synthesis)\b",
+    r"\bmost (?:capable|powerful|intelligent)\b",
+    r"\b(use|run) (?:the )?(?:strongest|best|top|smartest) model\b",
+    r"\bfable\b",
+    # Hungarian
+    r"\b(bizonyítsd|bizonyítás|vezesd le|levezetés|formális)\b",
+    r"\b(legnehezebb|legjobb algoritmus|optimális algoritmus|első elvekből)\b",
+    r"\b(legerősebb|legokosabb|legjobb) modell\b",
+]
 
 # High tier (opus): planning, design, architecture, deep reasoning, audit,
 # research, hard root-cause debugging, security review.
@@ -294,9 +335,10 @@ def recommend_model_tier(text: str) -> Optional[ModelTier]:
     """Recommend a subagent model for the prompt's phase, or None when unsure.
 
     Same conservative bar as classify_prompt: no hint for slash commands, very
-    short prompts, or anything that doesn't clearly match a phase. High tier is
-    checked first so "security audit of the new module" routes to opus, not the
-    implementation tier.
+    short prompts, or anything that doesn't clearly match a phase. Tiers are
+    checked TOP-DOWN (fable -> opus -> haiku -> sonnet) so the strongest explicit
+    signal wins: "prove the optimal algorithm" routes to fable, a plain "security
+    audit of the new module" routes to opus, and standard "implement X" to sonnet.
     """
     if not text or not text.strip():
         return None
@@ -306,11 +348,17 @@ def recommend_model_tier(text: str) -> Optional[ModelTier]:
     if _word_count(raw) < 4:
         return None
     lc = raw.lower()
+    if _matches_any(lc, _TIER_TOP_PATTERNS):
+        return ModelTier(
+            "fable",
+            "hardest reasoning (proof / novel-or-optimal algorithm / adversarial / frontier)",
+            "opus is not enough here -> top of the ladder (fable); spent only on an explicit hardness signal",
+        )
     if _matches_any(lc, _TIER_HIGH_PATTERNS):
         return ModelTier(
             "opus",
             "planning / design / deep-reasoning",
-            "hard reasoning -> top tier (one step above the bare minimum, capped at opus)",
+            "hard reasoning -> high tier (one step above the bare minimum); escalate to fable only on an explicit hardness signal",
         )
     if _matches_any(lc, _TIER_MECH_PATTERNS):
         return ModelTier(

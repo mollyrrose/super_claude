@@ -997,14 +997,23 @@ The `smart_router_prompt_hook.py` UserPromptSubmit hook auto-detects each
 prompt's phase and injects a `[model-router hint]` naming the tier to use when
 you delegate. Follow it:
 
-- Capability ladder (ascending): haiku < sonnet < opus. Fable is a separate fast
-  line, intentionally off-ladder.
+- Capability ladder (ascending): haiku < sonnet < opus < fable. As of
+  2026-07-02 Fable 5 is the TOP of the ladder (Mythos-class, above Opus), NOT
+  the old off-ladder "fast line". Model IDs: haiku=`claude-haiku-4-5`,
+  sonnet=`claude-sonnet-4-6`, opus=`claude-opus-4-8`, fable=`claude-fable-5`.
+- Hardest reasoning where opus is NOT enough (formal proof/derivation, novel or
+  provably-optimal algorithm design, adversarial/threat-model analysis, frontier
+  research synthesis) -> `fable` subagent.
 - Plan / design / architecture / audit / research / hard root-cause / security
-  -> `opus` subagent.
-- Implementation / refactor / tests / bug fix -> `sonnet` subagent.
+  -> `opus` subagent (the workhorse high tier).
+- Implementation / refactor / tests / bug fix / standard coding -> `sonnet`
+  subagent (Sonnet 4.6 is strong + cost-efficient on code benchmarks).
 - Mechanical (rename, format, list, grep, typo, version bump) -> `haiku` subagent.
-- Policy: pick one tier above the bare minimum and break ties upward ("one
-  version higher than needed"), capped at opus.
+- Policy: pick the IDEAL model that is still SUFFICIENT for the task, not the
+  biggest — choose the lowest tier that clears it and break ties upward by one
+  step ("one version higher than needed"). The ceiling is now `fable`, but
+  escalating to it requires an explicit hardness signal; ordinary design/audit
+  stays on opus so the top tier is spent only where it changes the answer.
 
 Apply it only when the work is substantial enough to delegate — quick
 conversational turns and tiny edits stay on the main model. The hint is
@@ -1012,10 +1021,11 @@ advisory; the user can override. Set a subagent's model via the Agent/Task
 `model` field (`opus|sonnet|haiku|fable`) or the agent definition's frontmatter.
 
 When the active provider is GLM (z.ai) instead of Anthropic, this same ladder
-and the same hints apply UNCHANGED — the `opus|sonnet|haiku` aliases just resolve
-to GLM models per the per-tier env mapping in the "GLM (z.ai)" section above.
-Delegate exactly as you would on Anthropic; only the concrete model behind each
-tier differs.
+and the same hints apply UNCHANGED — the `fable|opus|sonnet|haiku` aliases just
+resolve to GLM models per the per-tier env mapping in the "GLM (z.ai)" section
+above (`fable` maps to the GLM flagship alongside `opus` when GLM exposes no
+distinct top model). Delegate exactly as you would on Anthropic; only the
+concrete model behind each tier differs.
 
 ## Decision log
 
