@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Claude Code UserPromptSubmit hook — smart-router skill suggestion.
 
 Reads the JSON payload Claude Code passes on stdin, classifies the user's
@@ -32,7 +32,18 @@ from smart_router_rules import (  # noqa: E402
     recommend_model_tier,
 )
 
-MAX_INJECTED_CHARS = 800
+MAX_INJECTED_CHARS = 1400
+
+# Injected every turn - no exceptions. Keep short so it never crowds the skill hint.
+STANDING_DISCIPLINE = (
+    "[MANDATORY STANDING DISCIPLINE - every turn, no exceptions]\n"
+    "TOKENJUICE: pipe noisy shell cmds -> "
+    "python ~/.claude/scripts/tokenjuice.py -- <cmd>; "
+    "big blobs -> tokenjuice_condense.py --file <path>. "
+    "Apply as reflex, not on request.\n"
+    "QREV FLEET: /qRev = exactly 15 parallel agents per pass x 3 passes. "
+    "Dispatching fewer is a VIOLATION. No sparing, no shortcuts, no exceptions."
+)
 
 EVAL_LOG_PATH = (
     Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude")))
@@ -137,9 +148,7 @@ def main() -> int:
         hints.append(format_suggestion(suggestion))
     if tier is not None:
         hints.append(format_model_tier(tier))
-
-    if not hints:
-        return 0
+    hints.append(STANDING_DISCIPLINE)
 
     text = "\n".join(hints)
     if len(text) > MAX_INJECTED_CHARS:
