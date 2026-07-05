@@ -92,6 +92,7 @@ panel_lenses:                  # max-mode default — all 22 lenses on
   - claude-direct              # TRUE Claude voice via claude_critic.py — independent of session provider; the real-Claude lens when running on GLM
   - glm                        # TRUE GLM voice via glm_critic.py (GLM_API_KEY/ZAI_API_KEY) — paid flagship; the real-GLM lens when running on Claude
   - glm-free                   # same glm_critic.py, free tier (model: glm-4-flash) — a free GLM voice alongside the paid one
+  - ornith                     # LOCAL Ornith 35B via scripts/ornith_critic.py — llama-server at http://127.0.0.1:8080; mutes if server not running
   # ----- 7 research-derived lenses (2024-2026 multi-agent planning research) -----
   - spec-conformance           # MAST: drift vs original ask (21% of multi-agent failures)
   - executable-check           # LLM-Modulo: cheapest thing actually runnable
@@ -119,6 +120,7 @@ relay_order:                   # order the provider voices take their turn (acti
   - glm-free
   - subq
   - subq-free                  # free SubQ voice (tier:free) — joins the circle when configured/keyless
+  - ornith                     # LOCAL Ornith 35B — joins the relay when llama-server is running
 openai_backend: api            # api | browser
                                #   api     = OpenAI HTTP API (needs OPENAI_API_KEY)
                                #   browser = drive the logged-in ChatGPT web
@@ -191,6 +193,7 @@ The roster of external voices:
 | `claude-direct` | `scripts/claude_critic.py` | `ANTHROPIC_API_KEY` **or** the `claude` CLI | TRUE Claude voice, independent of the session provider. Backend auto-select: `api` if `ANTHROPIC_API_KEY` set, else `cli` = shells out to `claude -p` with the GLM env stripped, using the Claude **subscription**. CLI model chain opus->sonnet->haiku (graceful fallback so a $20/Pro plan that lacks Opus still yields a Claude voice); override the head with `CLAUDE_CRITIC_CLI_MODEL` or per-call `model`. Force backend with `CLAUDE_CRITIC_BACKEND=api\|cli`. |
 | `glm` | `scripts/glm_critic.py` | `GLM_API_KEY` **or** `ZAI_API_KEY` | TRUE GLM voice, independent of the session provider — the RECIPROCAL of `claude-direct`: a real GLM opinion when qPlan runs on Claude. Paid flagship, auto-discovered (glm-5.x > glm-4.6 ...). OpenAI-compatible endpoint `GLM_BASE_URL` (default z.ai). Lock a model with `GLM_MODEL` or per-call `model`. |
 | `glm-free` | `scripts/glm_critic.py` | `GLM_API_KEY` **or** `ZAI_API_KEY` | Same script, **free** tier: pass `model: glm-4-flash` (override via `GLM_FREE_MODEL`). A free GLM voice that runs alongside the paid `glm` lens, so the panel hears both the paid and the free GLM. |
+| `ornith` | `scripts/ornith_critic.py` | None (local, no key) — llama-server must be running | LOCAL Ornith 35B (Ornith-1.0-APEX-I-Compact). Endpoint: `http://127.0.0.1:8080` (override via `ORNITH_BASE_URL`). Model name: `ornith` (override via `ORNITH_MODEL`). **Mutes silently if the server is not running** — start with `C:\llama\start-ornith.ps1`. Kill switch: `QPLAN_ORNITH_DISABLE=1`. Unique value: independent local reasoning, no cloud dependency, no quota, no latency from network hops. |
 
 ### GLM-awareness — get a real Claude voice even while running on GLM
 

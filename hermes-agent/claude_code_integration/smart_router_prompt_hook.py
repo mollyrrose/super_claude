@@ -37,10 +37,10 @@ MAX_INJECTED_CHARS = 1400
 # Injected every turn - no exceptions. Keep short so it never crowds the skill hint.
 STANDING_DISCIPLINE = (
     "[MANDATORY STANDING DISCIPLINE - every turn, no exceptions]\n"
-    "TOKENJUICE: pipe noisy shell cmds -> "
+    "TOKENJUICE: pipe ALL Bash/PowerShell cmds -> "
     "python ~/.claude/scripts/tokenjuice.py -- <cmd>; "
     "big blobs -> tokenjuice_condense.py --file <path>. "
-    "Apply as reflex, not on request.\n"
+    "No exceptions except interactive cmds and exact-byte-required cmds.\n"
     "QREV FLEET: /qRev = exactly 15 parallel agents per pass x 3 passes. "
     "Dispatching fewer is a VIOLATION. No sparing, no shortcuts, no exceptions."
 )

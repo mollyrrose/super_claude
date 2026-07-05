@@ -35,7 +35,7 @@ The same rule covers **emoji-style** decorative glyphs and any visually similar 
 - check / OK / pipa (all colors, weights, and box variants): U+2713, U+2714, U+2714 U+FE0F, U+2705, U+2611, U+1F5F8, U+1F5F9
 - fail / wrong / X mark (all colors, weights, and box variants): U+2715, U+2716, U+2717, U+2718, U+274C, U+274E, U+2612, U+1F5D9, U+1F5F4, U+1F5F5, U+1F5F7
 - info source: U+2139, U+1F6C8
-- warning / alert: warning sign `⚠️` (U+26A0, with or without the U+FE0F variation selector — bans both `⚠` and `⚠️`), no entry `⛔` (U+26D4), police light `🚨` (U+1F6A8)
+- warning / alert: warning sign `⚠️` (U+26A0, with or without the U+FE0F variation selector — bans both `⚠` and `⚠️`), no entry `⛔` (U+26D4), police light `🚨` (U+1F6A8), shield `🛡️` (U+1F6E1), broom `🧹` (U+1F9F9)
 - status dots: `🟢🔴🟡🔵` (U+1F7E2..U+1F7E6) and the larger circle family
 - thumbs / pointing hands: `👍👎` (U+1F44D/U+1F44E), `👉👈👆👇`
 - decoration: `✨` (U+2728), `⭐🌟`, `🔥` (U+1F525), `🚀` (U+1F680), `🎉🎊`, `💯`, target `🎯` (U+1F3AF)
