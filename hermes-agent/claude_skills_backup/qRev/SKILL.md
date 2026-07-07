@@ -168,6 +168,8 @@ If the user combines args (e.g. `/qRev topic:security branch`), apply both: scop
 
 ## Output
 
+**Answer-First (A3 schema):** The very first line of the report is a one-sentence aggregate verdict with confidence, before any section headers: `qRev: [SHIP-BLOCK|WARNING|LGTM-WITH-NOTES|CLEAN] -- <one sentence summary of the most critical finding or "no blockers">. Confidence: [high|medium|low]. Agents: <N>/<M> engaged.` Only THEN the structured report below.
+
 A single report with `/rev`'s output structure ("`# /rev report — ...`") plus:
 
 - **Phase 0 verdict** (Pass / Pass-with-notes / Block) at the top of the header line, alongside the SHIP-BLOCK / WARNING / LGTM-WITH-NOTES / CLEAN aggregate verdict.

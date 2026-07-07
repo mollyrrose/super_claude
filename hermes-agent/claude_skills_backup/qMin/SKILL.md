@@ -25,6 +25,8 @@ For each proposed or pending change, evaluate:
 
 ## Output
 
+**Answer-First (A3 schema):** The very first line of output is a one-sentence verdict with confidence: `qMin: [Pass|Pass-with-notes|Block] -- <one sentence summary of the key finding or "no issues">. Confidence: [high|medium|low].` Only THEN the detail below.
+
 Produce a short verdict, then auto-fix.
 
 - **Pass** — proceed; no fixes needed.
