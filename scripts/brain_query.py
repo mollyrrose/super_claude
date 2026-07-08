@@ -72,14 +72,19 @@ def _read_jsonl(path: pathlib.Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     bad = 0
     # errors='replace': survive cp1252/BOM fragments without crashing the whole stream
-    with path.open(encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            line = line.strip()
-            if line:
-                try:
-                    rows.append(json.loads(line))
-                except json.JSONDecodeError:
-                    bad += 1
+    try:
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if line:
+                    try:
+                        rows.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        bad += 1
+    except OSError as e:
+        # permission / lock / TOCTOU race after the exists() check -- degrade, don't crash
+        print(f"  [warn] {path.name}: unreadable ({e.__class__.__name__}) -- returning partial data")
+        return rows
     if bad:
         print(f"  [warn] {path.name}: {bad} malformed line(s) skipped")
     return rows
@@ -96,17 +101,19 @@ def _ts(row: dict[str, Any]) -> datetime | None:
     ts_str = row.get("ts") or row.get("timestamp")
     if not ts_str:
         return None
-    # Try tz-aware formats first, then tz-naive with UTC assumption to avoid silent exclusion
+    # Try tz-aware formats first, then tz-naive with UTC assumption to avoid silent exclusion.
+    # The literal-Z format belongs in the NAIVE group: strptime's "Z" is a plain
+    # character (not %z), so it yields a naive datetime that must be UTC-tagged,
+    # or later tz-aware comparisons raise TypeError.
     for fmt in (
         "%Y-%m-%dT%H:%M:%S%z",
         "%Y-%m-%dT%H:%M:%S.%f%z",
-        "%Y-%m-%dT%H:%M:%SZ",
     ):
         try:
             return datetime.strptime(ts_str, fmt)
         except ValueError:
             pass
-    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
+    for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
         try:
             return datetime.strptime(ts_str, fmt).replace(tzinfo=timezone.utc)
         except ValueError:
@@ -191,6 +198,9 @@ def cmd_router(args: argparse.Namespace) -> None:
                 f"  [warn] invoked_skill_or_null is unpopulated in {null_invoked}/{len(rows)} rows"
                 f" -- run hermes_backfill_router_log.py first; --misses output is not valid"
             )
+            # Stop here: printing a 0/0 miss count under an "output is not valid"
+            # warning reads as perfect router accuracy to anyone who missed the warning.
+            return
         paired = [r for r in rows if r.get("suggested_skill_or_null") and r.get("invoked_skill_or_null")]
         misses = [r for r in paired if r["invoked_skill_or_null"] != r["suggested_skill_or_null"]]
         print(f"Router misses: {len(misses)} / {len(paired)} paired rows (of {len(rows)} total)")

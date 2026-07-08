@@ -216,7 +216,12 @@ def main() -> int:
         fh.write(json.dumps(rec) + "\n")
     payload = json.dumps({"prompt": "do a small thing", "session_id": "smoke-dispatch",
                           "transcript_path": tpath, "model": "claude-opus-4-8"})
-    rc, out, err = _run_subprocess("UserPromptSubmit", payload, {"QREV_AUTO_LEVEL": "0"})
+    # Hermetic: the gate's master kill switch (CC_BUDGET_GATE_DISABLE=1) may be
+    # deliberately set in the ambient env; B1 tests dispatch plumbing, so it
+    # force-enables the gate for this subprocess only.
+    rc, out, err = _run_subprocess("UserPromptSubmit", payload,
+                                   {"QREV_AUTO_LEVEL": "0",
+                                    "CC_BUDGET_GATE_DISABLE": "0"})
     if rc != 0:
         failures.append(f"B1 exit {rc} (stderr: {err[:160]})")
     elif out:

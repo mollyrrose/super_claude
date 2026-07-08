@@ -55,6 +55,7 @@ import io
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Absolute hook paths, mirroring what settings.json registered before
@@ -171,6 +172,32 @@ def _extract_context(stdout: str) -> str:
     return ""
 
 
+def _log_injection_size(merged: str, piece_count: int) -> None:
+    """Append the merged additionalContext size to a per-turn JSONL log.
+
+    ISC #3 (AI_OS_STRATEGY.md sect. 12, "token floor held"): the per-turn
+    injected-context budget is verified by diffing THIS log before/after any
+    OS change -- the statusline can't isolate the injection delta. One row per
+    UserPromptSubmit dispatch, zero rows lost to errors (silent no-op).
+    Kill switch: CC_INJECTION_LOG_DISABLE=1, or delete the log file.
+    """
+    if os.environ.get("CC_INJECTION_LOG_DISABLE") == "1":
+        return
+    try:
+        base = Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude")))
+        row = {
+            "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "event": "UserPromptSubmit",
+            "bytes": len(merged.encode("utf-8")),
+            "approx_tokens": len(merged) // 4,
+            "pieces": piece_count,
+        }
+        with (base / ".hook_injection_log.jsonl").open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row) + "\n")
+    except Exception:
+        pass  # never block the user on logging
+
+
 def _dispatch_user_prompt_submit(hooks, payload_raw: str) -> int:
     pieces: list[str] = []
     for label, path in hooks:
@@ -178,6 +205,7 @@ def _dispatch_user_prompt_submit(hooks, payload_raw: str) -> int:
         ctx = _extract_context(res.stdout)
         if ctx:
             pieces.append(ctx)
+    _log_injection_size("\n\n".join(pieces), len(pieces))
     if pieces:
         merged = "\n\n".join(pieces)
         decision = {

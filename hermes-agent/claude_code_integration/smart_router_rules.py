@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Callable, List, Optional
+from collections.abc import Callable
 
 
 @dataclass(frozen=True)
@@ -43,14 +43,14 @@ def _word_count(text: str) -> int:
     return len(re.findall(r"\S+", text))
 
 
-def _matches_any(text_lc: str, patterns: List[str]) -> bool:
+def _matches_any(text_lc: str, patterns: list[str]) -> bool:
     return any(re.search(p, text_lc) for p in patterns)
 
 
 # ── Rules ──────────────────────────────────────────────────────────────
 
 
-def _rule_bug(text_lc: str) -> Optional[Suggestion]:
+def _rule_bug(text_lc: str) -> Suggestion | None:
     patterns = [
         r"\btraceback\b",
         r"\bstack trace\b",
@@ -70,7 +70,7 @@ def _rule_bug(text_lc: str) -> Optional[Suggestion]:
     return None
 
 
-def _rule_release_check(text_lc: str) -> Optional[Suggestion]:
+def _rule_release_check(text_lc: str) -> Suggestion | None:
     patterns = [
         r"\b(?:before|ready to) (?:merge|release|publish|ship)\b",
         r"\bpr (?:ready|review)\b",
@@ -89,7 +89,7 @@ def _rule_release_check(text_lc: str) -> Optional[Suggestion]:
     return None
 
 
-def _rule_sprint_audit(text_lc: str) -> Optional[Suggestion]:
+def _rule_sprint_audit(text_lc: str) -> Suggestion | None:
     patterns = [
         r"\breview (?:my )?(?:code|changes|branch|the (?:repo|project|whole)|everything)\b",
         r"\breview (?:this|that|it)\b",
@@ -109,7 +109,7 @@ def _rule_sprint_audit(text_lc: str) -> Optional[Suggestion]:
     return None
 
 
-def _rule_research(text_lc: str) -> Optional[Suggestion]:
+def _rule_research(text_lc: str) -> Suggestion | None:
     patterns = [
         r"\bdeep[-\s]?dive\b",
         r"\bresearch (?:the|this|how|why)\b",
@@ -126,7 +126,7 @@ def _rule_research(text_lc: str) -> Optional[Suggestion]:
     return None
 
 
-def _rule_design(text_lc: str) -> Optional[Suggestion]:
+def _rule_design(text_lc: str) -> Suggestion | None:
     patterns = [
         r"\bhow should (?:i|we)\b",
         r"\bhow do (?:we|i) (?:design|architect|approach|structure)\b",
@@ -150,7 +150,7 @@ def _rule_design(text_lc: str) -> Optional[Suggestion]:
     return None
 
 
-def _rule_fable_orchestration(text_lc: str) -> Optional[Suggestion]:
+def _rule_fable_orchestration(text_lc: str) -> Suggestion | None:
     patterns = [
         r"\bfable.{0,30}\borchestrat",
         r"\badvisor.{0,20}\bfable\b",
@@ -173,7 +173,7 @@ def _rule_fable_orchestration(text_lc: str) -> Optional[Suggestion]:
     return None
 
 
-def _rule_refactor_implement(text_lc: str, raw: str) -> Optional[Suggestion]:
+def _rule_refactor_implement(text_lc: str, raw: str) -> Suggestion | None:
     keyword_patterns = [
         # `implement|build|add … noun` with up to 60 chars between
         r"\b(implement|build|add)\b.{0,60}\b(feature|component|module|system|endpoint|pipeline|handler|integration|service|migration)\b",
@@ -199,7 +199,7 @@ def _rule_refactor_implement(text_lc: str, raw: str) -> Optional[Suggestion]:
 
 
 # Order: most specific first. The rule that matches wins.
-_RULES: List[Callable[..., Optional[Suggestion]]] = [
+_RULES: list[Callable[..., Suggestion | None]] = [
     _rule_bug,
     _rule_release_check,
     _rule_sprint_audit,
@@ -210,7 +210,7 @@ _RULES: List[Callable[..., Optional[Suggestion]]] = [
 ]
 
 
-def classify_prompt(text: str) -> Optional[Suggestion]:
+def classify_prompt(text: str) -> Suggestion | None:
     """Classify a user prompt; return a Suggestion or None."""
     if not text or not text.strip():
         return None
@@ -355,7 +355,7 @@ _TIER_IMPL_PATTERNS = [
 ]
 
 
-def recommend_model_tier(text: str) -> Optional[ModelTier]:
+def recommend_model_tier(text: str) -> ModelTier | None:
     """Recommend a subagent model for the prompt's phase, or None when unsure.
 
     Same conservative bar as classify_prompt: no hint for slash commands, very

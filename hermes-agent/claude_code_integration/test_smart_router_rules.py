@@ -8,7 +8,13 @@ from __future__ import annotations
 
 import unittest
 
-from smart_router_rules import Suggestion, classify_prompt, format_suggestion
+from smart_router_rules import (
+    Suggestion,
+    _rule_fable_orchestration,
+    classify_prompt,
+    format_suggestion,
+    recommend_model_tier,
+)
 
 
 class TestClassifyPrompt(unittest.TestCase):
@@ -176,6 +182,98 @@ class TestClassifyPrompt(unittest.TestCase):
             "should we mark this ready to release after the smoke test passes?",
             "/check",
         )
+
+
+class TestFableOrchestrationRule(unittest.TestCase):
+    """Regression coverage for the two 2026-07-07 pattern fixes:
+    (a) `/advisor fable` uses a plain prefix (a \\b before `/` never matches
+        after whitespace), (b) fable+opus requires a delegation co-signal so
+        plain comparison questions stay unrouted. The rule takes LOWERCASED
+        text (classify_prompt lowercases before dispatch)."""
+
+    def test_advisor_fable_mid_prompt_matches(self) -> None:
+        # classify_prompt skips prompts STARTING with a slash command, so the
+        # /advisor pattern only ever fires mid-prompt -- test it there.
+        r = _rule_fable_orchestration(
+            "set the model to opus 4.8 then run /advisor fable to wire it up"
+        )
+        self.assertIsNotNone(r)
+        assert r is not None
+        self.assertEqual(r.skill, "/fable-orchestration")
+
+    def test_fable_orchestrate_matches(self) -> None:
+        r = _rule_fable_orchestration("use fable to orchestrate opus delegates")
+        self.assertIsNotNone(r)
+
+    def test_route_fable_matches(self) -> None:
+        r = _rule_fable_orchestration("how do i route fable to opus workers")
+        self.assertIsNotNone(r)
+
+    def test_fable_driven_matches(self) -> None:
+        r = _rule_fable_orchestration("fable-driven pipeline setup for the repo")
+        self.assertIsNotNone(r)
+
+    def test_fable_opus_with_cosignal_matches(self) -> None:
+        r = _rule_fable_orchestration("wire fable above opus to orchestrate the build")
+        self.assertIsNotNone(r)
+
+    def test_fable_opus_comparison_no_match(self) -> None:
+        # The narrowed fable+opus pattern must NOT fire on comparison questions.
+        self.assertIsNone(
+            _rule_fable_orchestration("is fable better than opus on benchmarks?")
+        )
+
+    def test_fable_opus_no_cosignal_no_match(self) -> None:
+        self.assertIsNone(
+            _rule_fable_orchestration("fable opus comparison benchmark results")
+        )
+
+    def test_plain_fable_mention_no_match(self) -> None:
+        self.assertIsNone(
+            _rule_fable_orchestration("what do you think about the fable model?")
+        )
+
+
+class TestRecommendModelTier(unittest.TestCase):
+    def assertTier(self, prompt: str, expected_model: str) -> None:
+        tier = recommend_model_tier(prompt)
+        self.assertIsNotNone(tier, f"Expected {expected_model}, got None for: {prompt!r}")
+        assert tier is not None
+        self.assertEqual(
+            tier.model, expected_model,
+            f"For prompt {prompt!r}: expected {expected_model}, got {tier.model}",
+        )
+
+    def test_optimal_algorithm_routes_to_fable(self) -> None:
+        self.assertTier(
+            "prove this algorithm is optimal from first principles", "fable"
+        )
+
+    def test_security_audit_routes_to_opus(self) -> None:
+        self.assertTier("security audit of the new payments module", "opus")
+
+    def test_rename_routes_to_haiku(self) -> None:
+        self.assertTier("rename the helper variable in this file please", "haiku")
+
+    def test_implement_feature_routes_to_sonnet(self) -> None:
+        self.assertTier(
+            "implement the session handler feature with unit tests", "sonnet"
+        )
+
+    def test_high_beats_impl_precedence(self) -> None:
+        # HIGH (opus) patterns are checked before IMPL (sonnet).
+        self.assertTier(
+            "plan the architecture and then implement the new feature", "opus"
+        )
+
+    def test_slash_command_returns_none(self) -> None:
+        self.assertIsNone(recommend_model_tier("/think plan this out end to end"))
+
+    def test_short_prompt_returns_none(self) -> None:
+        self.assertIsNone(recommend_model_tier("show status now"))
+
+    def test_empty_returns_none(self) -> None:
+        self.assertIsNone(recommend_model_tier(""))
 
 
 class TestFormatSuggestion(unittest.TestCase):
