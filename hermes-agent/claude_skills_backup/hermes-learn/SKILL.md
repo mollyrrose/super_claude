@@ -78,9 +78,14 @@ origin_session: <session_id_if_known_else_omit>
 2. (Step.)
 3. (Step.)
 
-## What to avoid
+## Gotchas
 
-- (Failure mode you observed in this session.)
+<!-- Edge cases, stylistic quirks, and any correction you had to make so a
+     future run does not repeat it. This section is LIVING: append a new bullet
+     every time the skill misfires and gets corrected (see "Enhancing a skill
+     with a gotcha" in hermes-learn). Start it with the failure modes you already
+     observed in this session; grow it over time. -->
+- (Failure mode / quirk observed, and the rule that avoids it.)
 
 ## Output
 
@@ -148,6 +153,24 @@ One block to the user:
 ```
 
 Then continue with whatever the user was doing.
+
+## Enhancing a skill with a gotcha (feedback loop)
+
+Skills compound only if their mistakes are fed back in. When an EXISTING
+`hermes-auto-*` (or hand-written) skill was just used and its output needed
+correction — an edge case it missed, a stylistic quirk, anything you had to go
+back and forth on — append that lesson as a one-line bullet under that skill's
+`## Gotchas` section (create the section if absent), then continue. Trigger:
+the user says something like "enhance the skill so we don't hit this again", or
+you notice a skill misfired the same way twice.
+
+Rules for a gotcha bullet:
+- One line: the trap + the rule that avoids it (`- <what went wrong> -> <do this instead>`).
+- Only from a REAL correction in this session, never speculative.
+- Edit in place via a shell command (same `~/.claude/` prompt-avoidance reason as
+  section 2); do not rewrite the rest of the skill.
+- This is the lightweight, in-the-moment complement to the after-the-fact
+  `hermes-curate` queue — patch now while the mistake is concrete.
 
 ## Style rules
 

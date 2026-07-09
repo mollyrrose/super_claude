@@ -43,6 +43,8 @@ hermes-agent.bak.*/
 ruvector.db
 /.scratch/
 /tmp/
+# External-repo clones + downloaded pages staged during integration-sweep recon; scratch only.
+/Temp/
 # Per-project local task list lives here (exclude/TODO.md) — never committed.
 /exclude/
 # Arbor autonomous-run session state (qGoal multi-variant backend) — durable run memory, local only.
