@@ -1,0 +1,48 @@
+{
+  "$schema": "https://charm.land/crush.json",
+  "providers": {
+    "local-llama": {
+      "type": "openai-compat",
+      "base_url": "http://localhost:8080/v1",
+      "api_key": "not-needed",
+      "models": [
+        {
+          "id": "local-model",
+          "name": "Local llama.cpp (Ornith)",
+          "context_window": 32768,
+          "default_max_tokens": 4096
+        }
+      ]
+    },
+    "glm-zai": {
+      "type": "anthropic",
+      "base_url": "https://api.z.ai/api/anthropic",
+      "api_key": "$ZAI_API_KEY",
+      "models": [
+        {
+          "id": "GLM-5.2",
+          "name": "GLM 5.2 (z.ai) - DORMANT until ZAI_API_KEY is set",
+          "context_window": 200000,
+          "default_max_tokens": 8192
+        }
+      ]
+    },
+    "anthropic-apikey": {
+      "type": "anthropic",
+      "base_url": "https://api.anthropic.com/v1",
+      "api_key": "$ANTHROPIC_API_KEY",
+      "models": [
+        {
+          "id": "claude-sonnet-4-6",
+          "name": "Claude Sonnet 4.6 (per-token API - DORMANT until ANTHROPIC_API_KEY is set)",
+          "context_window": 200000,
+          "default_max_tokens": 8192
+        }
+      ]
+    }
+  },
+  "models": {
+    "large": { "provider": "local-llama", "model": "local-model" },
+    "small": { "provider": "local-llama", "model": "local-model" }
+  }
+}

@@ -84,6 +84,14 @@ ruvector.db
 *.crdownload
 *.openai_api_key
 
+# ---------- Crush (charmbracelet/crush) local config + state ----------
+# crush.json holds machine-specific provider config (local model paths, env-var
+# key refs); the tracked template is crush.json.example. .crush/ is Crush's local
+# session/data dir. Never commit these.
+/crush.json
+/.crush.json
+/.crush/
+
 # ---------- per-project Claude Code harness state ----------
 /.claude/
 

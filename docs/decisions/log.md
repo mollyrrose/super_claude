@@ -3,6 +3,25 @@
 Newest entry on top. One short ADR-style entry per non-trivial / hard-to-reverse
 decision. See `~/.claude/CLAUDE.md` "Decision log" for the format.
 
+### 2026-07-10 - Adopt Crush as a secondary multi-model/LSP tool; Claude Code stays primary
+Decision: Install Crush (charmbracelet/crush, via `npm i -g @charmland/crush`) as a
+SECONDARY coding tool wired to the local llama.cpp ("Ornith") server by default,
+with GLM/Anthropic-API providers dormant. Claude Code remains primary. Also prepped
+Claude Code for free-tier Base44 code handoff (base44 CLI + official base44 skills +
+documented docs-MCP/login steps).
+Why: Crush's real value is multi-model + LSP-as-agent-tools + native Windows, useful
+for running tasks on a free local model or GLM. But the pasted "Crush beats Claude"
+comparison was mostly fabricated, Crush removed Anthropic OAuth (cannot use the
+Claude subscription), and none of the super_claude harness (hooks/coord/q*/statusline)
+carries over - so it supplements Claude Code, it cannot replace it.
+Rejected alternatives: (a) migrate to Crush as primary - rejected: abandons the whole
+hook/skill/coord ecosystem and forces per-token API or local-only. (b) analysis-only,
+no install - rejected: user chose a full hands-on trial. (c) paid Base44 Builder
+workflow - rejected: user chose the free path.
+Revisit if: Crush restores Anthropic subscription auth, OR a GLM key arrives (then
+Crush-on-GLM becomes a first-class cheap tier), OR Base44 free-tier limits block the
+intended app work (then reconsider Builder).
+
 ### 2026-06-17 - Retire /qPlan auto; split brain (qPlan) from hands (qGoal)
 Decision: Remove the `/qPlan auto` execution mode and move ALL execution +
 optimization into a new standalone `/qGoal` skill. qPlan becomes strictly

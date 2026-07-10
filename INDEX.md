@@ -49,6 +49,12 @@ rules in `CLAUDE.md`. Editing here changes how every Claude Code session behaves
   outside the repo; these are copies kept in sync by hand when the config
   changes.
 - `docs/decisions/log.md` — decision log (ADR-style).
+- `docs/crush-vs-claude-code.md` — honest Crush (charmbracelet/crush) analysis +
+  how it's wired here (secondary tool on the local llama.cpp model; `crush.json`
+  gitignored, template `crush.json.example`, notes in `CRUSH.md`).
+- `docs/base44-handoff.md` — free-path runbook for editing Base44 apps as code
+  from Claude Code (base44 CLI + official `base44-*` skills; `base44 login` + docs
+  MCP are user-run steps).
 
 ## Username placeholder convention (`[USER]`)
 
