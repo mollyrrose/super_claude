@@ -79,6 +79,10 @@ crush -y      # -y/--yolo auto-accepts permissions in the TUI (your call, your m
 ```
 
 Gotchas learned during setup:
+- The local model server must be RUNNING, and `base_url` must use `127.0.0.1`, NOT
+  `localhost`: on Windows Go resolves `localhost` to IPv6 `[::1]` where llama.cpp
+  is not listening (it binds IPv4), giving "connection actively refused" / a Crush
+  "provider error". crush.json uses `http://127.0.0.1:8080/v1`.
 - `-y/--yolo` is a ROOT flag (interactive TUI only). The non-interactive
   `crush run` subcommand does NOT accept it - `crush --yolo run ...` errors.
 - `crush run -c <dir>` resolves `<dir>` against your CURRENT directory, so use an
