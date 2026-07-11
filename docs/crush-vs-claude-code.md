@@ -68,19 +68,34 @@ server) or GLM, NOT per-token Anthropic API. Keep Claude Code primary.
 
 ## How to run the trial (local + free)
 
-Start the llama.cpp server (port 8080), then:
+Start the llama.cpp server (port 8080). The reliable hands-on way is the
+interactive TUI, run FROM the project directory so relative paths resolve and you
+can watch each step:
 
 ```
-# non-interactive, auto-accept file ops, against the local model
-crush --yolo run -c .scratch/crush-trial "Create adder.py with add(a,b) and mul(a,b)."
-
-# or interactive TUI
-crush
+cd D:\projects\super_claude
+crush -y      # -y/--yolo auto-accepts permissions in the TUI (your call, your machine)
+# then type: Create adder.py with add(a,b) and mul(a,b).
 ```
+
+Gotchas learned during setup:
+- `-y/--yolo` is a ROOT flag (interactive TUI only). The non-interactive
+  `crush run` subcommand does NOT accept it - `crush --yolo run ...` errors.
+- `crush run -c <dir>` resolves `<dir>` against your CURRENT directory, so use an
+  ABSOLUTE path (e.g. `D:\projects\super_claude\.scratch\crush-trial`).
+- Non-interactive `crush run` will STALL on the file-write approval (no TUI to
+  answer it) unless you opt in by adding a permissions allowlist to `crush.json`.
+  Enable only if you accept the agent writing/running unattended:
+
+  ```
+  "permissions": { "allowed_tools": ["view","ls","glob","grep","write","edit"] }
+  ```
+
+  Then: `crush run -c D:\projects\super_claude\.scratch\crush-trial "Create adder.py ..."`
 
 Because the default model is the local llama.cpp server, this costs nothing.
-(Note: a large local model like the 35B Ornith is slow; use it to exercise the
-*workflow*, not to benchmark code quality.)
+The 35B Ornith model is slow; use the trial to exercise the *workflow*, not to
+benchmark speed (point `local-llama` at a smaller GGUF for snappier runs).
 
 ## When to reach for which
 
