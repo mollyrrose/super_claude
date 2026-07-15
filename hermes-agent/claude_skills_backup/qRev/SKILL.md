@@ -247,9 +247,16 @@ $env:DEEPSEEK_API_KEY = "sk-..."
 
 If one of the paid keys is missing or its account is empty, that provider gets silently skipped and `/qRev` continues with the remaining ones — exactly the behaviour the user asked for. No prompts, no blockers, no half-finished runs.
 
-## Codex Challenge Mode (default-ON adversarial reviewer)
+## Codex Challenge Mode (default-ON adversarial reviewer, no paid key required)
 
-Codex Challenge mode is an **adversarial code reviewer** that actively tries to break your code — finding edge cases, race conditions, security holes, resource leaks, and silent data corruption paths that normal reviews miss. It runs as a permanent additional agent in **Phase B Pass 2 (security-focused)** on every `/qRev`. It silently skips when the `codex` binary is not found or auth is missing; disable it explicitly with `QREV_CODEX_CHALLENGE=0`.
+Codex Challenge mode is an **adversarial code reviewer** that actively tries to break your code — finding edge cases, race conditions, security holes, resource leaks, and silent data corruption paths that normal reviews miss. It runs as a permanent additional agent in **Phase B Pass 2 (security-focused)** on every `/qRev`.
+
+**No paid API key required.** The runner (`scripts/lib/run_codex_challenge.py`) tries backends in order:
+1. **Local LLM** (auto-detected, no key): llama.cpp at `127.0.0.1:8080`, Ollama at `11434`, LM Studio at `1234`. Override with `QREV_LOCAL_LLM_URL`. Any OpenAI-compatible local server works.
+2. **Codex CLI** (fallback, requires `OPENAI_API_KEY` or `CODEX_API_KEY` or `~/.codex/auth.json`).
+3. **Silent skip** if neither is available (does not block the run).
+
+Kill switch: `QREV_CODEX_CHALLENGE=0`.
 
 **Why Codex Challenge adds value:** It provides a genuinely independent second opinion from a different model family (OpenAI's frontier coding model) with an explicitly adversarial prompt ("think like an attacker and chaos engineer"). The gstack `/codex challenge` skill demonstrates this pattern with JSONL output parsing for reasoning traces.
 
