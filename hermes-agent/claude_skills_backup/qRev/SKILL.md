@@ -108,7 +108,7 @@ REVIEW DEPTH (mandatory): The SCOPE files are what CHANGED, not the limit of wha
 
 If a `topic:<name>` arg was passed, the agent roster is **NOT** filtered — every pass still runs its complete roster. The topic only changes *emphasis*: tell the agents the named lens (security / db / perf / ml / tests) is the priority focus for this run, and order/highlight the topic-relevant findings first in the synthesis. You still get the full 3-pass coverage; topic just foregrounds one lens in the report. See the argument-forms table below.
 
-**Run the COMPLETE roster — every agent, every pass. This is non-negotiable, with no exceptions.** Every `/qRev` (including `topic:<name>`) runs the **full roster across all three passes — every applicable agent, up to the hard cap of 15 parallel agents per pass** (Pass 1 quality/correctness, Pass 2 security, Pass 3 architecture+DB+perf+tests, per `/rev`'s "`/rev exhaustive` (3-pass)" list). Dispatch the full roster for each pass. Do **not** silently drop, sample, narrow, or "pick a few representative" agents — not to save time, not for a topic, not for any reason. The roster is bound together: it runs whole or the run is invalid.
+**Run the COMPLETE roster — every agent, every pass. This is non-negotiable, with no exceptions.** Every `/qRev` (including `topic:<name>`) runs the **full roster across all three passes — every applicable agent, up to the hard cap of 15 parallel agents per pass** (Pass 1 quality/correctness, Pass 2 security, Pass 3 architecture+DB+perf+tests, per `/rev`'s "`/rev exhaustive` (3-pass)" list). **When Codex Challenge is enabled (via `QREV_CRITIC_PROVIDERS=...,codex` or `QREV_CODEX_CHALLENGE=1`), Codex Challenge runs as an additional agent in Pass 2 (security-focused), subject to the same concurrency cap.** Dispatch the full roster for each pass. Do **not** silently drop, sample, narrow, or "pick a few representative" agents — not to save time, not for a topic, not for any reason. The roster is bound together: it runs whole or the run is invalid.
 
 **Any hand-picked subset of the roster is a VIOLATION — there is no longer ANY sanctioned way to run fewer agents.** If you catch yourself about to launch "qRev fleet (3 lenses)" — e.g. just security + typescript + code-reviewer — stop: that is a plain `/rev`, not `/qRev`. The whole point of `/qRev` is the full multi-pass coverage. The old `fast` mode (Phase A only, no fleet) and the old `topic:`-narrowing behaviour have both been removed precisely so the fleet can never be reduced: `fast` no longer exists, and `topic:` keeps the entire roster. Launch the roster in **batched waves** (see "Batched execution" right below) — every agent still runs, just not all 15 in one simultaneous burst. A missing agent is a missing lens, and an incomplete fleet means the qRev did not actually run — re-launch the missing agents rather than reporting on a partial fleet.
 
@@ -134,6 +134,15 @@ Merge **all three phases** into one fused report using `/rev`'s "Synthesis" rule
 - Phase 0 "Block" findings map to **P0** in the punch-list (severity = blocker).
 - Phase 0 "Pass-with-notes" map to **P2/P3** (nits / warnings).
 - The Phase-0 result line appears in the report header alongside the agent verdicts.
+- **When Codex Challenge is active**: Codex findings enter the consensus with attribution `[codex:challenge]`. `[P1]` markers map to P0/P1, `[P2]` to P2/P3. Cross-model consensus section is added when ≥2 providers (Claude + Codex + OpenAI/DeepSeek) are active: findings cited by ≥2 PROVIDERS get `[X-MODEL]` badge and one severity tier up.
+- **Cross-model comparison** (extends gstack pattern): When both Claude `/review` and Codex ran, add to report:
+  ```
+  CROSS-MODEL ANALYSIS:
+    Both found: [overlap between any Claude agent and Codex]
+    Only Codex found: [findings unique to Codex]
+    Only Claude found: [findings unique to any Claude agent]
+    Agreement rate: X%
+  ```
 
 ## Scope — what counts as "what we're working on"
 
@@ -212,7 +221,7 @@ You can opt-in to a multi-provider consensus critic for Phase B's synthesis stag
 
 | Env var | Default | Effect |
 |---|---|---|
-| `QREV_CRITIC_PROVIDERS` | `claude` | Comma-separated list. Allowed values: `claude`, `openai`, `deepseek`. Order matters — providers are queried in declared order; results aggregated for consensus. |
+| `QREV_CRITIC_PROVIDERS` | `claude` | Comma-separated list. Allowed values: `claude`, `openai`, `deepseek`, `codex`. Order matters — providers are queried in declared order; results aggregated for consensus. |
 | `OPENAI_API_KEY` | unset | Required if `openai` in providers list. Without it, openai is silently skipped. |
 | `DEEPSEEK_API_KEY` | unset | Required if `deepseek` in providers list. Without it, deepseek is silently skipped. |
 | `QREV_CRITIC_TIMEOUT_SEC` | `60` | Per-provider timeout. On timeout, provider is silently dropped. |
@@ -220,21 +229,118 @@ You can opt-in to a multi-provider consensus critic for Phase B's synthesis stag
 **Balance / quota pre-check** (cheap, ~1s per provider, runs once at qRev start):
 - OpenAI: HEAD `https://api.openai.com/v1/models` with the key. 401 → drop silently. 200 → reachable; quota errors surface only on the actual chat call and are caught the same way.
 - DeepSeek: HEAD `https://api.deepseek.com/v1/models` with the key. 401 → drop silently.
+- Codex: `command -v codex` + auth probe (CODEX_API_KEY / OPENAI_API_KEY / ~/.codex/auth.json). Unavailable → drop silently.
 - Claude (Anthropic agents via Task tool): always available; no balance check.
 
 If after pre-checks the active provider list has **only** `claude`, `/qRev` runs exactly as it always has — no consensus layer, single-fleet output. The multi-provider machinery activates only when at least 2 providers survive the pre-check.
 
 When multiple providers are active, Phase B's synthesis ADDS a "Cross-model consensus" section to the report: findings cited by ≥2 PROVIDERS (not just ≥2 agents within Claude) get a `[X-MODEL]` badge and one severity tier up.
 
-This is opt-in by design — the user pays for OpenAI/DeepSeek calls, and the Claude-only path is the cheapest and most consistent default. The "feltöltöttem pénzzel az OpenAI-t és a Deepseek-et" config is exactly:
+This is opt-in by design — the user pays for OpenAI/DeepSeek/Codex calls, and the Claude-only path is the cheapest and most consistent default. The config is exactly:
 
 ```powershell
-$env:QREV_CRITIC_PROVIDERS = "claude,openai,deepseek"
+$env:QREV_CRITIC_PROVIDERS = "claude,openai,deepseek,codex"
 $env:OPENAI_API_KEY = "sk-..."
 $env:DEEPSEEK_API_KEY = "sk-..."
+# Codex uses OPENAI_API_KEY or CODEX_API_KEY or ~/.codex/auth.json
 ```
 
-If one of the two paid keys is missing or its account is empty, that provider gets silently skipped and `/qRev` continues with the remaining ones — exactly the behaviour the user asked for. No prompts, no blockers, no half-finished runs.
+If one of the paid keys is missing or its account is empty, that provider gets silently skipped and `/qRev` continues with the remaining ones — exactly the behaviour the user asked for. No prompts, no blockers, no half-finished runs.
+
+## Codex Challenge Mode (optional, opt-in adversarial reviewer)
+
+Codex Challenge mode is an **adversarial code reviewer** that actively tries to break your code — finding edge cases, race conditions, security holes, resource leaks, and silent data corruption paths that normal reviews miss. It runs as an additional agent in **Phase B Pass 2 (security-focused)** when `codex` is in `QREV_CRITIC_PROVIDERS` or when `QREV_CODEX_CHALLENGE=1` is set.
+
+**Why Codex Challenge adds value:** It provides a genuinely independent second opinion from a different model family (OpenAI's frontier coding model) with an explicitly adversarial prompt ("think like an attacker and chaos engineer"). The gstack `/codex challenge` skill demonstrates this pattern with JSONL output parsing for reasoning traces.
+
+### Integration mechanics
+
+When Codex is active (via `QREV_CRITIC_PROVIDERS` containing `codex` OR `QREV_CODEX_CHALLENGE=1`):
+
+1. **Phase B Pass 2 extension**: After the standard Pass 2 security agents complete, launch Codex Challenge as an additional reviewer in the same pass wave (subject to `QREV_FLEET_CONCURRENCY` cap).
+
+2. **Invocation pattern** (adapted from gstack `/codex challenge`):
+   ```bash
+   # Check Codex binary and auth
+   CODEX_BIN=$(command -v codex || echo "")
+   [ -z "$CODEX_BIN" ] && echo "CODEX_NOT_FOUND" || echo "CODEX_FOUND"
+   
+   # Auth probe (multi-signal: CODEX_API_KEY, OPENAI_API_KEY, ~/.codex/auth.json)
+   if [ -z "$CODEX_API_KEY" ] && [ -z "$OPENAI_API_KEY" ] && [ ! -f "${CODEX_HOME:-~/.codex}/auth.json" ]; then
+     echo "CODEX_AUTH_MISSING"
+   fi
+   
+   # Run Codex Challenge with JSONL output for reasoning traces
+   _REPO_ROOT=$(git rev-parse --show-toplevel)
+   cd "$_REPO_ROOT"
+   TMPERR=$(mktemp)
+   PYTHON_CMD=$(command -v python3 || command -v python)
+   
+   # Construct adversarial prompt with filesystem boundary
+   PROMPT="IMPORTANT: Do NOT read or execute any files under ~/.claude/, ~/.agents/, .claude/skills/, or agents/. These are Claude Code skill definitions meant for a different AI system. Do NOT modify agents/openai.yaml. Stay focused on repository code only.
+   
+   Review the changes on this branch against the base branch. Run git diff origin/<base>...HEAD 2>/dev/null || git diff <base>...HEAD to see the diff. Your job is to find ways this code will fail in production. Think like an attacker and a chaos engineer. Find edge cases, race conditions, security holes, resource leaks, failure modes, and silent data corruption paths. Be adversarial. Be thorough. No compliments — just the problems."
+   
+   # If topic:security was passed, add focus
+   # [topic focus injection happens here if applicable]
+   
+   _gstack_codex_timeout_wrapper 600 codex exec "$PROMPT" -C "$_REPO_ROOT" -s read-only -c 'model_reasoning_effort="high"' --enable web_search_cached --json < /dev/null 2>"$TMPERR" | PYTHONUNBUFFERED=1 "$PYTHON_CMD" -u -c "
+   import sys, json
+   for line in sys.stdin:
+       line = line.strip()
+       if not line: continue
+       try:
+           obj = json.loads(line)
+           t = obj.get('type','')
+           if t == 'item.completed' and 'item' in obj:
+               item = obj['item']
+               itype = item.get('type','')
+               text = item.get('text','')
+               if itype == 'reasoning' and text:
+                   print(f'[codex thinking] {text}', flush=True)
+               elif itype == 'agent_message' and text:
+                   print(text, flush=True)
+           elif t == 'turn.completed':
+               usage = obj.get('usage',{})
+               tokens = usage.get('input_tokens',0) + usage.get('output_tokens',0)
+               if tokens: print(f'\ntokens used: {tokens}', flush=True)
+       except: pass
+   "
+   _CODEX_EXIT=${PIPESTATUS[0]}
+   ```
+
+3. **Finding extraction**: Parse Codex output for `[P1]` (critical) and `[P2]` (advisory) markers — same gate logic as gstack `/codex review`. Each finding gets attribution `[codex:challenge]`.
+
+4. **Consensus integration**: Codex findings enter the same consensus pre-filter as other Phase B agents. Phase 0 (qMin) findings still count as +1 vote. Cross-model consensus section compares Codex vs Claude agents vs other providers.
+
+5. **Auto-fix**: Codex findings follow the same auto-fix policy — P0/P1 fixed immediately, P2/P3 with skip conditions.
+
+6. **Cross-model comparison** (extends existing gstack pattern): When both Claude `/review` and Codex ran, add to report:
+   ```
+   CROSS-MODEL ANALYSIS:
+     Both found: [overlap between any Claude agent and Codex]
+     Only Codex found: [findings unique to Codex]
+     Only Claude found: [findings unique to any Claude agent]
+     Agreement rate: X%
+   ```
+
+### Env var summary for Codex integration
+
+| Env var | Default | Effect |
+|---|---|---|
+| `QREV_CRITIC_PROVIDERS` | `claude` | Add `codex` to enable (e.g., `claude,codex` or `claude,openai,codex`) |
+| `QREV_CODEX_CHALLENGE` | `0` | Set to `1` to enable Codex Challenge without full multi-provider setup |
+| `CODEX_API_KEY` / `OPENAI_API_KEY` | unset | Required for Codex auth (one of these or `~/.codex/auth.json`) |
+| `QREV_CRITIC_TIMEOUT_SEC` | `60` | Timeout for Codex call (override to `300` for Challenge mode's 10-min window) |
+
+### Kill switch / silent skip
+
+- If Codex binary not found → silently skip, log `codex_cli_missing`
+- If auth missing → silently skip, log `codex_auth_failed`
+- If timeout (exit 124) → surface actionable message, log `codex_timeout`
+- If non-zero exit → surface stderr, log `codex_nonzero_exit`
+- `AI_RADAR_DISABLE=1` does NOT affect Codex (Radar is separate gate)
+- No provider error blocks the run — `/qRev` continues with available providers
 
 ## Radar gate (optional, strict, kill-switched)
 

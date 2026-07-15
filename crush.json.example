@@ -44,5 +44,8 @@
   "models": {
     "large": { "provider": "local-llama", "model": "local-model" },
     "small": { "provider": "local-llama", "model": "local-model" }
+  },
+  "options": {
+    "skills_paths": []
   }
 }

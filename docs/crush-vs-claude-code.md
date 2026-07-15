@@ -79,6 +79,12 @@ crush -y      # -y/--yolo auto-accepts permissions in the TUI (your call, your m
 ```
 
 Gotchas learned during setup:
+- Crush scans `~/.claude/skills` and injects every discovered skill's metadata into
+  the prompt. With a large skills library (219 here) that is ~30k+ tokens, which
+  OVERFLOWS a small-context local model (32k) - the model returns "request exceeds
+  the available context size" and Crush shows a "bad request" / provider error.
+  crush.json sets `"options": { "skills_paths": [] }` to disable skill injection.
+  (Alternative: raise the server's `-c` context, but that wastes tokens every turn.)
 - The local model server must be RUNNING, and `base_url` must use `127.0.0.1`, NOT
   `localhost`: on Windows Go resolves `localhost` to IPv6 `[::1]` where llama.cpp
   is not listening (it binds IPv4), giving "connection actively refused" / a Crush
