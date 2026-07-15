@@ -108,7 +108,7 @@ REVIEW DEPTH (mandatory): The SCOPE files are what CHANGED, not the limit of wha
 
 If a `topic:<name>` arg was passed, the agent roster is **NOT** filtered — every pass still runs its complete roster. The topic only changes *emphasis*: tell the agents the named lens (security / db / perf / ml / tests) is the priority focus for this run, and order/highlight the topic-relevant findings first in the synthesis. You still get the full 3-pass coverage; topic just foregrounds one lens in the report. See the argument-forms table below.
 
-**Run the COMPLETE roster — every agent, every pass. This is non-negotiable, with no exceptions.** Every `/qRev` (including `topic:<name>`) runs the **full roster across all three passes — every applicable agent, up to the hard cap of 15 parallel agents per pass** (Pass 1 quality/correctness, Pass 2 security, Pass 3 architecture+DB+perf+tests, per `/rev`'s "`/rev exhaustive` (3-pass)" list). **When Codex Challenge is enabled (via `QREV_CRITIC_PROVIDERS=...,codex` or `QREV_CODEX_CHALLENGE=1`), Codex Challenge runs as an additional agent in Pass 2 (security-focused), subject to the same concurrency cap.** Dispatch the full roster for each pass. Do **not** silently drop, sample, narrow, or "pick a few representative" agents — not to save time, not for a topic, not for any reason. The roster is bound together: it runs whole or the run is invalid.
+**Run the COMPLETE roster — every agent, every pass. This is non-negotiable, with no exceptions.** Every `/qRev` (including `topic:<name>`) runs the **full roster across all three passes — every applicable agent, up to the hard cap of 15 parallel agents per pass** (Pass 1 quality/correctness, Pass 2 security, Pass 3 architecture+DB+perf+tests, per `/rev`'s "`/rev exhaustive` (3-pass)" list). **Codex Challenge is a permanent Pass 2 member — it runs in every `/qRev` as an adversarial security agent, subject to the same concurrency cap. It silently skips only when the `codex` binary or auth is unavailable; disable explicitly with `QREV_CODEX_CHALLENGE=0`.** Dispatch the full roster for each pass. Do **not** silently drop, sample, narrow, or "pick a few representative" agents — not to save time, not for a topic, not for any reason. The roster is bound together: it runs whole or the run is invalid.
 
 **Any hand-picked subset of the roster is a VIOLATION — there is no longer ANY sanctioned way to run fewer agents.** If you catch yourself about to launch "qRev fleet (3 lenses)" — e.g. just security + typescript + code-reviewer — stop: that is a plain `/rev`, not `/qRev`. The whole point of `/qRev` is the full multi-pass coverage. The old `fast` mode (Phase A only, no fleet) and the old `topic:`-narrowing behaviour have both been removed precisely so the fleet can never be reduced: `fast` no longer exists, and `topic:` keeps the entire roster. Launch the roster in **batched waves** (see "Batched execution" right below) — every agent still runs, just not all 15 in one simultaneous burst. A missing agent is a missing lens, and an incomplete fleet means the qRev did not actually run — re-launch the missing agents rather than reporting on a partial fleet.
 
@@ -134,7 +134,7 @@ Merge **all three phases** into one fused report using `/rev`'s "Synthesis" rule
 - Phase 0 "Block" findings map to **P0** in the punch-list (severity = blocker).
 - Phase 0 "Pass-with-notes" map to **P2/P3** (nits / warnings).
 - The Phase-0 result line appears in the report header alongside the agent verdicts.
-- **When Codex Challenge is active**: Codex findings enter the consensus with attribution `[codex:challenge]`. `[P1]` markers map to P0/P1, `[P2]` to P2/P3. Cross-model consensus section is added when ≥2 providers (Claude + Codex + OpenAI/DeepSeek) are active: findings cited by ≥2 PROVIDERS get `[X-MODEL]` badge and one severity tier up.
+- **Codex Challenge always runs in Pass 2** (unless skipped due to missing binary/auth or `QREV_CODEX_CHALLENGE=0`): Codex findings enter the consensus with attribution `[codex:challenge]`. `[P1]` markers map to P0/P1, `[P2]` to P2/P3. Cross-model consensus section is added when ≥2 providers (Claude + Codex + OpenAI/DeepSeek) are active: findings cited by ≥2 PROVIDERS get `[X-MODEL]` badge and one severity tier up.
 - **Cross-model comparison** (extends gstack pattern): When both Claude `/review` and Codex ran, add to report:
   ```
   CROSS-MODEL ANALYSIS:
@@ -247,15 +247,15 @@ $env:DEEPSEEK_API_KEY = "sk-..."
 
 If one of the paid keys is missing or its account is empty, that provider gets silently skipped and `/qRev` continues with the remaining ones — exactly the behaviour the user asked for. No prompts, no blockers, no half-finished runs.
 
-## Codex Challenge Mode (optional, opt-in adversarial reviewer)
+## Codex Challenge Mode (default-ON adversarial reviewer)
 
-Codex Challenge mode is an **adversarial code reviewer** that actively tries to break your code — finding edge cases, race conditions, security holes, resource leaks, and silent data corruption paths that normal reviews miss. It runs as an additional agent in **Phase B Pass 2 (security-focused)** when `codex` is in `QREV_CRITIC_PROVIDERS` or when `QREV_CODEX_CHALLENGE=1` is set.
+Codex Challenge mode is an **adversarial code reviewer** that actively tries to break your code — finding edge cases, race conditions, security holes, resource leaks, and silent data corruption paths that normal reviews miss. It runs as a permanent additional agent in **Phase B Pass 2 (security-focused)** on every `/qRev`. It silently skips when the `codex` binary is not found or auth is missing; disable it explicitly with `QREV_CODEX_CHALLENGE=0`.
 
 **Why Codex Challenge adds value:** It provides a genuinely independent second opinion from a different model family (OpenAI's frontier coding model) with an explicitly adversarial prompt ("think like an attacker and chaos engineer"). The gstack `/codex challenge` skill demonstrates this pattern with JSONL output parsing for reasoning traces.
 
 ### Integration mechanics
 
-When Codex is active (via `QREV_CRITIC_PROVIDERS` containing `codex` OR `QREV_CODEX_CHALLENGE=1`):
+Codex Challenge runs by default (unless `QREV_CODEX_CHALLENGE=0` or binary/auth absent):
 
 1. **Phase B Pass 2 extension**: After the standard Pass 2 security agents complete, launch Codex Challenge as an additional reviewer in the same pass wave (subject to `QREV_FLEET_CONCURRENCY` cap).
 
@@ -328,9 +328,9 @@ When Codex is active (via `QREV_CRITIC_PROVIDERS` containing `codex` OR `QREV_CO
 
 | Env var | Default | Effect |
 |---|---|---|
-| `QREV_CRITIC_PROVIDERS` | `claude` | Add `codex` to enable (e.g., `claude,codex` or `claude,openai,codex`) |
-| `QREV_CODEX_CHALLENGE` | `0` | Set to `1` to enable Codex Challenge without full multi-provider setup |
-| `CODEX_API_KEY` / `OPENAI_API_KEY` | unset | Required for Codex auth (one of these or `~/.codex/auth.json`) |
+| `QREV_CRITIC_PROVIDERS` | `claude` | Add `openai`/`deepseek` for cross-model critic (Codex is now always-on, not controlled here) |
+| `QREV_CODEX_CHALLENGE` | `1` | Set to `0` to disable Codex Challenge (e.g., no key, CI environment, cost control) |
+| `CODEX_API_KEY` / `OPENAI_API_KEY` | unset | Required for Codex auth (one of these or `~/.codex/auth.json`); if missing, Codex silently skips |
 | `QREV_CRITIC_TIMEOUT_SEC` | `60` | Timeout for Codex call (override to `300` for Challenge mode's 10-min window) |
 
 ### Kill switch / silent skip
