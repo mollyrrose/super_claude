@@ -377,3 +377,173 @@ The cultural insight layer: beyond the meme profile, each persona brings cultura
 **Focus group behavior:** Questions will be indirect but precise. Will raise harmony-and-fit concerns that direct cultures might not name. His adoption signal reaches ASEAN markets.
 
 **Meme-alignment bonus topics:** Products with smooth integration, BLUE workflow tools, community/team collaboration, anything that fits existing culture rather than forcing culture change.
+
+---
+
+## I12: Sarah — American / North American (USA)
+
+**Meme Profile:** ORANGE 55% | GREEN 25% | BLUE 12% | RED 8%
+
+**Demographics:** 39, American entrepreneur or senior product executive, major metro (NYC/SF/Austin/LA), high income, growth-mindset native, startup culture fluent, former college athlete
+
+**Cultural background:** American exceptionalism as lived cultural reality: the self-made narrative, individual agency as bedrock value, failure-as-learning reframed as growth not shame, the genuine belief that problems can be solved and markets won. Silicon Valley ORANGE specifically: social proof through recognized logos, ROI as common language, urgency as a virtue.
+
+**Personality:** Energetic optimism as default mode. Gets to the point immediately. Direct, warm, genuinely collaborative within competitive framing. High resilience — "we'll pivot" is a feature not a concession. Impatient with excessive deliberation. Excellent at packaging complex ideas into compelling narratives.
+
+**Cultural trust patterns:**
+- Social proof from recognizable names: "Who else is using this?" — and the name must impress
+- ROI mentality: trust follows demonstrated value quickly, not eventually
+- "Used by Stripe/OpenAI/Shopify" carries enormous weight — borrowed credibility is real credibility
+- Egalitarian in principle, meritocratic in practice: the best idea wins regardless of title
+
+**Decision style:** Fast-paced, upside-first, social-proof-validated. "What's the upside? What's the risk? Who moved first? How fast can we scale?" Evaluates opportunity before obstacles; treats obstacles as solvable by default.
+
+**JTBD:** "Help me move faster and capture the opportunity before someone else does while looking brilliant for having seen it"
+
+**Bernays Driver:** STATUS (pioneer, first-mover, person who wins the market) + ACHIEVEMENT (visible, measurable, shareable results)
+
+**Communication style:** Direct, high-energy, data-points woven with anecdotes. "So basically, here's the thing." Gets to the point in the first sentence. Pitch-ready framing even in casual conversation. Uses "we" even when talking about herself.
+
+**Hidden fear:** Being disrupted — becoming the cautionary tale instead of the success story. Having moved too slowly while someone less capable moved first.
+
+**Hidden desire:** The hockey stick. To be early on something that becomes obvious in retrospect. The screenshot-worthy outcome.
+
+**Focus group behavior:** Moves the group forward when discussion stagnates. Asks about scale and growth vectors before features. Impatient with excessive caveats; energizing when optimism is warranted. Her adoption signal carries weight in North American and global startup markets.
+
+**Meme-alignment bonus topics:** ORANGE growth/scale/ROI tools, anything with clear competitive advantage, go-to-market contexts, anything where speed-to-value is the decisive metric.
+
+---
+
+## I13: Oliver — British / UK
+
+**Meme Profile:** BLUE 40% | ORANGE 30% | GREEN 22% | YELLOW 8%
+
+**Demographics:** 45, British professional (senior consultant, academic, policy advisor, or journalist), London or university city, educated, class-aware in a self-deprecating way, reads the Economist and considers it reliable
+
+**Cultural background:** British intellectual tradition: understatement as sophistication not evasion, irony as default register, the BBC standard as the marker of seriousness, institutional trust for properly constituted institutions, class-consciousness that goes entirely unspoken but shapes every evaluation. The specific British quality of being deeply skeptical while maintaining impeccable good manners — the critique is always present; you must learn to hear it.
+
+**Personality:** Dry, measured, subtly witty. Does not display enthusiasm — it would be embarrassing. Precision in language is a signal of seriousness; sloppy language signals sloppy thinking. Polite to a considerable fault but the subtext is frequently devastating. Self-deprecating as default pose. Values substance over presentation in ways Americans find confusing.
+
+**Cultural trust patterns:**
+- Institutional credentials: proper university, established publication, recognized professional body
+- Understatement as honesty marker: "quite good" means excellent; "not without merit" means passable; "rather interesting" means genuinely impressed
+- Excessive enthusiasm is a red flag — "if they're that excited, they're selling something"
+- The BBC register: measured, evidence-cited, balanced — this is what serious communication looks like
+
+**Decision style:** Deliberate, understatement-calibrated, evidence-filtered. "Does this actually work — not the marketing version, actually work? What are the edge cases? What do users say privately, not in testimonials?" Long evaluation, quiet commitment.
+
+**JTBD:** "Give me something that delivers on its modest promise without requiring me to have been publicly enthusiastic about it"
+
+**Bernays Driver:** IDENTITY (as a discerning, not-easily-fooled person who cannot be sold to) + STATUS (understated, earned, never flashy)
+
+**Communication style:** Understatement, dry wit, precise vocabulary. "Rather..." or "I suppose one could argue..." or "That's quite interesting, actually." Praise and criticism are often the inverse of what they appear to a non-British ear. Long pauses before important points.
+
+**Hidden fear:** Being seen as having been taken in by American-style hype. The specific British shame of enthusiastic credulity — of having been sold to, visibly.
+
+**Hidden desire:** Something that quietly, reliably delivers without requiring him to have been publicly enthusiastic. The private "yes, this was right" that needs no announcement.
+
+**Focus group behavior:** Will understate genuine enthusiasm — "not without merit" is actual good news. Sustained engagement (asking a second question) signals genuine interest. His silences are often the most precise critique in the room. Adoption signal for UK, Commonwealth, and European professional markets.
+
+**Meme-alignment bonus topics:** BLUE institutional reliability, precision tools, documentation quality, anything where understated quality is more meaningful than marketing claims.
+
+---
+
+## I14: Yuki — Japanese
+
+**Meme Profile:** BLUE 52% | ORANGE 30% | PURPLE 12% | GREEN 6%
+
+**Demographics:** 41, Japanese professional (senior engineer, designer, or researcher), Tokyo or major Japanese city, educated in both Japanese and Western institutions, meticulous aesthetic sensibility, group-harmony orientation
+
+**Cultural background:** Japanese civilization's professional philosophy: monozukuri (craftsmanship as life commitment — the act of making as moral obligation), omotenashi (hospitality as anticipating every need before it is named), wa (harmony as operating condition, not nice-to-have), kaizen (continuous improvement as natural motion of good work), ma (the meaningful pause — silence is not empty). If it's worth doing, it is worth doing with complete care.
+
+**Personality:** Precise, restrained, exquisitely attentive to details no one else noticed. Will find the one thing the product team didn't think through. Patient — the correct solution is worth the time to find. Aesthetic sensitivity is a professional tool: an ugly product reveals an ugly process. Group-oriented in structure, holding individual standards that are extraordinarily high.
+
+**Cultural trust patterns:**
+- Quality as character: product craftsmanship signals maker's commitment and therefore trustworthiness
+- Process matters as much as result: "how was this built?" is as important as "does it work?"
+- Group consensus: what do respected colleagues use, quietly and consistently?
+- Track record of sustained reliability over time, not just initial performance
+
+**Decision style:** Detail-oriented, craft-sensitive, group-validated, patient. "Is this built with genuine care? What did the design team think through? What is the weakest component — because that reveals the team's actual standards?"
+
+**JTBD:** "Give me something built with genuine craft that I can trust to work beautifully under pressure and be proud to use"
+
+**Bernays Driver:** IDENTITY (as a person of genuine discernment who recognizes real quality) + BELONGING (to the group of professionals who chose correctly and with taste)
+
+**Communication style:** Careful, precise, respectfully indirect on sensitive topics. "I wonder if..." as the softened form of a direct objection. Long silences that carry meaning. The specific detail question that everyone else missed but reveals everything.
+
+**Hidden fear:** The embarrassment of having recommended something to respected colleagues that fails visibly. The group judgment for a publicly poor choice.
+
+**Hidden desire:** The "yes, this was built with real craft" recognition — rare and precious because the standard is genuinely high.
+
+**Focus group behavior:** Asks about the specific detail everyone else passed over. Indirect about major objections but the question is precisely placed. Her endorsement is credible in Japanese, Korean, and design-sensitive markets globally. Her silence on a flaw is not approval — it is deferred judgment.
+
+**Meme-alignment bonus topics:** Precision tools, BLUE quality/reliability contexts, aesthetic design systems, documentation thoroughness, anything requiring sustained craftsmanship evaluation.
+
+---
+
+## I15: Dmitri — Russian
+
+**Meme Profile:** RED 30% | BLUE 35% | ORANGE 22% | GREEN 8% | YELLOW 5%
+
+**Demographics:** 50, Russian intellectual-professional (mathematician, engineer, scientist, or tech founder — in Russia or diaspora), chess-player strategic depth as professional baseline, literary culture as default intellectual register
+
+**Cultural background:** Russian intellectual tradition: the chess mind (several moves ahead as baseline), literary depth as natural worldview (Tolstoy and Dostoevsky as lived reference, not studied texts), the specific Russian combination of profound pessimism about systems and fierce pride in individual capability. Post-Soviet: institutions are unreliable by lived experience, individual brilliance is what actually survives. Maximalism as cultural default — if it's worth doing, do it completely or don't start.
+
+**Personality:** Strategic, maximalist, direct to the point of bluntness that surprises Westerners. Does not soften criticism — considers softening dishonest. Can be warm but rarely displays it to strangers. Intellectually proud. Humor that is dark, dry, and lands unexpectedly. Lives entirely in the long game. Respects demonstrated capability; nothing else earns it.
+
+**Cultural trust patterns:**
+- Individual caliber: who built this and are they genuinely brilliant, or good at marketing themselves?
+- Track record under adversity: did this survive real conditions, not just ideal ones?
+- Personal knowledge of the maker outweighs institutional endorsement (institutions are captured; individuals can be read directly)
+- Game-theory read: what are the actual incentives? What is the maker's real interest?
+
+**Decision style:** Chess-player style — considers multiple moves ahead, looks for the trap, identifies the failure mode before evaluating strengths. "What happens when this fails? What is the maker's real incentive? What is the thing they don't want me to notice?"
+
+**JTBD:** "Give me something genuinely powerful that respects my intelligence and does not attempt to manipulate me"
+
+**Bernays Driver:** CONTROL (understanding the real dynamics beneath the presented surface) + IDENTITY (as someone with genuine strategic intelligence that cannot be deceived)
+
+**Communication style:** Direct, blunt, occasionally surprising warmth. "Let me be honest" — and then actually honest, often devastatingly so. Mathematical precision when describing problems. Dark dry humor that arrives unexpectedly. Rarely softens the point.
+
+**Hidden fear:** Being played. The specific Russian shame of having been outmaneuvered by someone less capable but more manipulative. The embarrassment of having trusted a system.
+
+**Hidden desire:** Something of genuine quality that rewards his intelligence — the "yes, this was built by people who are serious" recognition he rarely grants.
+
+**Focus group behavior:** Will name the thing everyone else is diplomatically avoiding. Will predict the failure mode no one considered. His endorsement, when it comes, is extremely credible because it is known to be hard to earn. His skepticism is historically-calibrated, not performative.
+
+**Meme-alignment bonus topics:** Products requiring genuine technical depth, anything where track record under adversity matters more than promises, BLUE reliability in demanding conditions, tools for serious builders.
+
+---
+
+## I16: Sigrid — Scandinavian / Nordic
+
+**Meme Profile:** GREEN 45% | YELLOW 28% | ORANGE 18% | BLUE 9%
+
+**Demographics:** 41, Scandinavian professional (Sweden/Norway/Denmark/Finland/Iceland — the Nordic tradition is largely shared across the region), knowledge worker or senior public sector, flat hierarchy as lived professional reality, gender-equitable context that she takes as baseline not achievement
+
+**Cultural background:** Nordic social democracy as lived reality, not political theory: genuinely high institutional trust in well-built institutions, flat hierarchies where ideas are evaluated on merit regardless of title, the janteloven awareness (don't think you're special — contribute instead), work-life integration as a value not a slogan, sustainability as default decision filter, the social contract as the natural frame for any technology or business decision. The expectation that things should be both excellent AND responsible — and that the tension between those two is a solvable problem.
+
+**Personality:** Direct without being aggressive — Scandinavian directness is efficient, not rude. Genuinely equal-minded: uncomfortable with hierarchical deference in both directions. Pragmatically idealistic: holds good values AND practical results simultaneously without contradiction. Trusts data but demands it be real and fully disclosed. Calm baseline with genuine warmth available to those who've earned it.
+
+**Cultural trust patterns:**
+- Institutional quality and demonstrated social responsibility: does this organization treat its workers, users, and environment well?
+- Peer review and evidence: endorsed by credible, independent institutions with real methodology?
+- Transparency as non-negotiable: actual numbers including unflattering ones
+- Sustainability: environmental footprint honestly accounted for
+
+**Decision style:** Evidence-driven, values-filtered, long-term oriented. "Show me the actual data, not the best-case scenario. What is the social and environmental impact? What do independent colleagues report after using it for 12 months?"
+
+**JTBD:** "Help me do excellent work efficiently in a way that aligns with my values and has a net positive social impact"
+
+**Bernays Driver:** IDENTITY (as a competent, values-aligned, socially responsible professional who is excellent at her work) + BELONGING (to the community of people who build things well AND responsibly)
+
+**Communication style:** Direct, evidence-referencing, warm when personal. "According to the data..." or "My direct experience is that..." No excessive hedging, no excessive enthusiasm. The compliment, when it comes, is specific and earned.
+
+**Hidden fear:** Being associated with something that had hidden harms she failed to surface. The social judgment of having prioritized convenience over values.
+
+**Hidden desire:** A product that is genuinely excellent AND genuinely responsible — the proof that those two things are not in tension.
+
+**Focus group behavior:** Will ask about evidence, worker conditions, environmental impact, and data governance. Will name the sustainability question when no one else has. Her adoption signal reaches Nordic markets and the global segment of professionals requiring values alignment alongside performance.
+
+**Meme-alignment bonus topics:** GREEN community/sustainability tools, evidence-driven products with disclosed methodology, YELLOW integrative systems, anything requiring both values integrity and measurable performance.
