@@ -671,6 +671,15 @@ def main(argv=None):
 
     parts = _strip_leading_dashdash(args.command)
     command = " ".join(parts) if parts else None
+    # On Windows, spaces in path components break cmd.exe shell parsing (e.g.
+    # "C:/Users/Seal Josephson/..." splits at the space). Use list2cmdline to
+    # produce double-quoted tokens that cmd.exe understands.  The unquoted
+    # `command` string is still used as the rule-matching subject so that rule
+    # names like "git status" keep working unchanged.
+    if parts and sys.platform.startswith("win"):
+        exec_command = subprocess.list2cmdline(parts)
+    else:
+        exec_command = command
     subject = args.subject if args.subject is not None else command
 
     if args.probe:
@@ -691,7 +700,7 @@ def main(argv=None):
         except Exception:
             original = ""
     else:
-        original, rc = run_capture(command, timeout=args.timeout)
+        original, rc = run_capture(exec_command, timeout=args.timeout)
 
     # ---- kill switch / raw: pass-through, no compression ----
     if os.environ.get("TOKENJUICE_DISABLE") == "1" or args.raw:
