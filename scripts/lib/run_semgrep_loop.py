@@ -41,11 +41,32 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import Iterable
+
+
+def _extend_path_for_semgrep() -> None:
+    """Prepend user Python Scripts dirs to PATH so shutil.which finds semgrep
+    even when Claude Code launched from a different Python installation."""
+    if shutil.which("semgrep"):
+        return
+    candidates = [
+        os.path.expandvars(r"%APPDATA%\Python\Python313\Scripts"),
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\Python\Python313\Scripts"),
+        r"D:\AppData\Python\Python313\Scripts",
+        os.path.expandvars(r"%USERPROFILE%\AppData\Roaming\Python\Python313\Scripts"),
+    ]
+    for cand in candidates:
+        if os.path.isfile(os.path.join(cand, "semgrep.exe")):
+            os.environ["PATH"] = cand + os.pathsep + os.environ.get("PATH", "")
+            break
+
+
+_extend_path_for_semgrep()
 
 DEFAULT_BATCH_SIZE = 60   # conservative for Windows argv limits
 DEFAULT_MAX_RETRIES = 3
