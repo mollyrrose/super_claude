@@ -60,3 +60,48 @@ git -C D:\projects\super_claude add home_dotclaude\ ; git commit -m "chore: sync
   under `C:\Users\<user>`).
 - The GLM (z.ai) launcher and other one-off install commands live in the global
   `~/.claude/CLAUDE.md`; run them manually when needed.
+
+## External skills (bundled in repo, sources below)
+
+The following external skill packs are vendored into `hermes-agent/claude_skills_backup/`
+and installed by `restore_claude_config.ps1` alongside the other skills. No separate
+clone is needed -- the SKILL.md files are already in the repo.
+
+| Skill folder | Source repo | License |
+|---|---|---|
+| `no-ai-slop` | https://github.com/petergyang/no-ai-slop | MIT |
+| `i-have-adhd` | https://github.com/ayghri/i-have-adhd | MIT |
+| `code-structure` | https://github.com/michaelshimeles/skills/tree/main/code-structure | MIT |
+| `improve-codebase-architecture` | https://github.com/mattpocock/skills/tree/main/skills/engineering/improve-codebase-architecture | MIT |
+| `mp-code-review` | https://github.com/mattpocock/skills/tree/main/skills/engineering/code-review | MIT |
+| `mp-diagnosing-bugs` | https://github.com/mattpocock/skills/tree/main/skills/engineering/diagnosing-bugs | MIT |
+| `opensrc` | https://github.com/vercel-labs/opensrc | MIT |
+
+To pull the latest version of any of these from upstream:
+```powershell
+# Example: update mp-diagnosing-bugs
+$b64 = (gh api repos/mattpocock/skills/contents/skills/engineering/diagnosing-bugs/SKILL.md --jq '.content')
+[System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64 -replace '\n','')) |
+  Set-Content -Encoding UTF8 "hermes-agent\claude_skills_backup\mp-diagnosing-bugs\SKILL.md"
+Copy-Item "hermes-agent\claude_skills_backup\mp-diagnosing-bugs\SKILL.md" `
+  "$env:USERPROFILE\.claude\skills\mp-diagnosing-bugs\SKILL.md"
+```
+
+### opensrc CLI (optional, needed for the opensrc skill)
+
+The `opensrc` skill requires the `opensrc` CLI from vercel-labs:
+```powershell
+npm install -g opensrc
+# or without installing: npx opensrc path zod
+```
+
+### composio (optional, AI tool integration)
+
+Composio (https://github.com/ComposioHQ/composio) provides 250+ pre-built tool integrations
+for AI agents (GitHub, Slack, Gmail, etc.). Install when you need Claude agents to call
+external APIs without writing custom tool wrappers:
+```powershell
+pip install composio-claude          # Python SDK
+npm install @composio-dev/composio-core   # TypeScript SDK
+```
+See https://docs.composio.dev for available tools.

@@ -106,6 +106,53 @@ def _normalize_paths(raw: Iterable[str], repo_root: Path) -> list[str]:
     return out
 
 
+_CONFIG_ERROR_SIGNALS = (
+    "no rules matching",
+    "invalid config",
+    "no configs loaded",
+    "could not find config",
+    "error reading",
+    "error parsing",
+    "yaml parse error",
+    "unable to find",
+    "no such file or directory",
+    "filenotfounderror",
+    "connectionerror",
+    "network",
+)
+
+
+def _is_config_error(stderr: str) -> bool:
+    """True when semgrep failed due to a config/rule issue, not a source file."""
+    s = stderr.lower()
+    return any(sig in s for sig in _CONFIG_ERROR_SIGNALS)
+
+
+def _filter_configs(config_args: list[str], repo_root: Path) -> list[str]:
+    """Drop local config paths that don't exist, warn, keep remote configs."""
+    kept: list[str] = []
+    for cfg in config_args:
+        if cfg.startswith(("p/", "r/", "auto")):
+            kept.append(cfg)
+            continue
+        local = (repo_root / cfg).resolve() if not Path(cfg).is_absolute() else Path(cfg)
+        if local.exists():
+            kept.append(str(local))
+        else:
+            sys.stderr.write(
+                f"run_semgrep_loop: config not found, skipping: {cfg} "
+                f"(resolved: {local})\n"
+            )
+    return kept
+
+
+def _semgrep_path(p: str) -> str:
+    """Normalize path for semgrep: on Windows use forward slashes."""
+    if sys.platform == "win32":
+        return str(Path(p)).replace("\\", "/")
+    return p
+
+
 def _run_one_batch(
     config_args: list[str],
     paths: list[str],
@@ -115,9 +162,13 @@ def _run_one_batch(
     """Run semgrep on one batch. Returns (parsed_json, error_path_hint).
 
     error_path_hint is the path semgrep complained about (if extractable
-    from stderr) when it crashed in a way that left no JSON. The caller
-    uses it to drop the file and retry.
+    from stderr) when it crashed in a way that left no JSON. Returns None
+    for the hint when the failure is non-file-specific (config error, network,
+    etc.) so the caller does NOT binary-search and blame individual files.
     """
+    if not config_args:
+        config_args = ["auto"]
+
     cmd = ["semgrep"]
     for cfg in config_args:
         cmd.extend(["--config", cfg])
@@ -128,7 +179,7 @@ def _run_one_batch(
         "--quiet",
         "--error",
     ])
-    cmd.extend(paths)
+    cmd.extend([_semgrep_path(p) for p in paths])
 
     try:
         proc = subprocess.run(
@@ -154,15 +205,26 @@ def _run_one_batch(
             parsed = {}
 
     if parsed and isinstance(parsed.get("results"), list):
-        # Successful parse — return whatever semgrep gave us.
         return (parsed, None)
 
-    # No JSON. Try to extract the offending path from stderr to drop it.
+    # No JSON. Check if this is a config/network error (NOT file-specific).
+    # Return hint=None so the caller does NOT blame individual files.
+    if proc.stderr and _is_config_error(proc.stderr):
+        sys.stderr.write(
+            f"run_semgrep_loop: config/network error (not a file issue): "
+            f"{proc.stderr[:300]}\n"
+        )
+        return (
+            {"results": [], "errors": [{"type": "config-error", "stderr_tail": proc.stderr[-2000:]}]},
+            None,
+        )
+
+    # No JSON and not a config error -- try to extract the offending path from stderr.
     hint = None
     if proc.stderr:
         for line in proc.stderr.splitlines():
             for p in paths:
-                if p in line:
+                if p in line or _semgrep_path(p) in line:
                     hint = p
                     break
             if hint:
@@ -302,8 +364,11 @@ def main() -> None:
     raw_paths.extend(args.paths)
 
     if not args.config:
-        # Default to "auto" if caller didn't specify any config.
         args.config = ["auto"]
+
+    # Drop local config files that don't exist to avoid blaming source files
+    # for config-not-found errors (common cause of "skipped N files" on Windows).
+    args.config = _filter_configs(args.config, repo_root)
 
     paths = _normalize_paths(raw_paths, repo_root)
     summary = run(

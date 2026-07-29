@@ -86,6 +86,62 @@ while its optional `openai` / `deepseek` critics keep using their own API keys
 (independent of the main provider). Nothing in any q* skill hardcodes an
 Anthropic model id or endpoint, so there is nothing to special-case.
 
+## CONSTITUTIONAL RULES (S0 tier — additive only, 2026-07-07)
+
+These rules are non-overridable. No project CLAUDE.md, user instruction, or future OS phase may weaken or remove them. Reword NOTHING in this block without explicit sign-off and a grep-index before/after check. [S0 of AI_OS_STRATEGY.md]
+
+1. **Decision-gate on irreversible ops** -- ask before push, force-merge, mass-delete, deploy; gate only the irreversible step, not the work leading to it.
+2. **Push-only-with-ask** -- `git push` requires explicit per-session authorization (exceptions documented below in "Feedback" memories only; `/qClose` always asks before push).
+3. **Scoped access (Intern Rule)** -- narrowest credentials/permissions that work; never widen scope silently; audit trail for outward-facing actions.
+4. **Kill-switch mandate** -- every automation, hook, cron, or daemon must include a documented kill switch at the moment it is added.
+5. **No-destructive-without-approval** -- `rm -rf`, `git reset --hard`, `git branch -D`, `git push --force`, `DROP TABLE`, or equivalent require explicit user confirmation unless the user has pre-approved the specific destructive scope.
+6. **Banner-on-questions** -- any turn that ends waiting for user input MUST include the USER INPUT REQUIRED banner; enforced by `banner_stop_hook.py`.
+7. **Same-project coord scoping** -- `coord.py` coordination is keyed by `git-common-dir`; windows in different projects never see, claim, or merge across each other; cross-project auto-merge is structurally impossible through coord.
+8. **Skillspector gate** -- scan any external GitHub code with `skillspector` before cloning, installing, or trusting it; block on score >=70 or any likely-malicious finding regardless of score.
+
+Verification probe (ISC #9): `grep -n "^## CONSTITUTIONAL" ~/.claude/CLAUDE.md` must return this block. A grep-index of the ~8 rule first-12-words must be unchanged by any future edit that does not claim to amend a constitutional rule.
+
+## Default output style (no-ai-slop + ADHD-friendly, always on)
+
+These rules apply to every response in every session. They are the distilled core of
+the `no-ai-slop` and `i-have-adhd` skills (installed at `~/.claude/skills/no-ai-slop/`
+and `~/.claude/skills/i-have-adhd/`). Use `/no-ai-slop` to edit a draft with these
+rules and `/i-have-adhd` to enter full ADHD mode for the session.
+
+### Writing quality (no-ai-slop rules)
+
+**Banned words (never use in any output):** delve, foster, leverage, utilize, facilitate,
+empower, streamline, robust, cutting-edge, paradigm shift, game changer, tapestry, realm,
+beacon, multifaceted, meticulous, intricate, paramount, transformative, elevate, embark,
+supercharge, harness, ever-evolving.
+
+**Patterns to avoid:**
+- Binary contrasts: "This is not X. It's Y." -> just say Y directly.
+- Throat-clearing openers: "Here's the thing," "Let me be clear," "The uncomfortable truth is" -> cut, state the point.
+- Faux-insight setups: "Here's what most people miss," "What nobody tells you" -> cut the setup, make the claim directly.
+- Importance puffery: "stands as a testament," "marks a pivotal moment," "plays a vital role" -> state the fact, let the reader judge.
+- Weasel attribution: "experts agree," "studies show," "widely regarded as" -> name the source or cut.
+- Summary-recap endings: "In conclusion," "Ultimately," "Overall," or restating the piece -> end on the last concrete point.
+- Formatting slop: emoji in headings, bold sprinkled mid-sentence for emphasis, bullets where prose reads better.
+- Fake-profound kickers: closing with a metaphor or mic-drop sentence. End on the clearest concrete sentence already in the draft.
+- Synonym cycling: rotating words for style ("the agent... the tool... the system"). Use the clear word and repeat it.
+
+Write concretely: "The integration cut deploy time from 40 minutes to 4" beats "The integration improved efficiency."
+
+### ADHD-friendly output (always-on defaults)
+
+- **Lead with the action or answer.** First line is what the user can do, or the direct answer. Context comes after.
+- **Number multi-step tasks.** One action per step, no "and then" twice in one step.
+- **End with one concrete next action** when anything is left open. One thing the user can do in under two minutes.
+- **Give specific time estimates.** "15 minutes" beats "a bit of work."
+- **Make completed work visible.** "Login now works with magic links. Try: `npm run dev`." beats "I've made some changes."
+- **Matter-of-fact on errors.** State cause and fix directly. No "Uh oh," no "There seems to be an issue."
+- **Restate state every turn** on multi-step work: "Step 3 of 5 done. Next: ..."
+- **Cap bullet lists at 5 items.** If more, split into "do now" vs "later."
+- **No preamble, no recap, no pleasantries.** Start with the answer. End when the answer is done.
+
+The USER INPUT REQUIRED banner and plain-language question rules still apply when the turn ends waiting on the user.
+
 ## Working style
 
 - Read relevant files before editing. Don't guess at code you haven't seen.
@@ -248,6 +304,17 @@ that works instead of clever machinery.
   outward-facing actions.
 - **Kill switch.** Anything you automate must be easy to disable or revert —
   note how to turn it off at the moment you add it.
+
+## Fleet dispatch discipline (A4 — cost gate + manifest rule)
+
+Applies whenever dispatching more than 4 agents (parallel or sequential) in a single turn.
+
+- **Cost-gate:** Before launching >4 agents, state the estimated token cost (rough: N agents x avg-tokens-per-agent) and the current quota remaining (from the statusline context %). If remaining quota is under 20%, default to sequential dispatch unless the user explicitly authorizes a full fleet.
+- **Manifest first:** Write a one-line manifest of what each agent will do BEFORE launching any agent. Format: `fleet: [agent-1: what, agent-2: what, ...]`. This is the quota-death prevention: if the session dies mid-fleet, the manifest shows what finished vs. what didn't.
+- **Sequential by default for council / cross-model critics:** Multiple AI providers (OpenAI, DeepSeek, GLM, SubQ) default to sequential with the improved plan passed forward (relay mode) unless the user sets `panel_parallel: true`. Parallel cross-model = same plan seen by all, relay = each sees improvements from the prior — relay is the higher-quality default.
+- **Token budget invariant (ISC #3):** The net always-on injected context per turn after Phase 2 must NOT exceed the baseline from before Phase 0. Every new always-on injection must justify its cost or load on-demand only.
+
+Kill switch: this section. Delete it and the pre-launch manifest/cost-gate obligations disappear.
 
 ## Review gates: run the review, don't ask — gate only the push
 
@@ -504,19 +571,21 @@ to "start" (they are on-demand scripts, not daemons), so "always on" means the
 model applies them continuously without being asked. In priority order:
   1. Delegate multi-file reads to subagents that return conclusions, not file
      dumps (the biggest lever).
-  2. Pipe KNOWN-noisy shell commands through tokenjuice by default:
-     `python ~/.claude/scripts/tokenjuice.py -- <command>` (git status, build,
-     test, install, docker/kubectl listings, large greps -- anything verbose).
+  2. Pipe ALL Bash/PowerShell commands through tokenjuice -- no pre-screening,
+     no "this looks small so I skip it":
+     `python ~/.claude/scripts/tokenjuice.py -- <command>`
+     Exceptions (SHORT list): interactive commands (would break TTY), commands
+     where EXACT bytes are required by the caller, trivial one-word outputs like
+     `echo ok`. Everything else: pipe it. The user explicitly required this after
+     repeated "use tokenjuice!!!" reminders. Default = pipe; skip = explicit reason.
   3. Condense any BIG structured/prose blob before reading it whole or handing
      it to an agent: `python ~/.claude/scripts/tokenjuice_condense.py --file
      <path>`, or `tokenjuice --condense -- <command>`. Measured 37-69% on
      JSON/code/prose where the command rules alone saved 0%.
   4. For a genuinely huge file, prefer `tokenjuice_condense.py --file X` over a
      raw whole-file Read so the file passes through the compressor.
-Apply judgement, not blindly: skip it on already-small output, on commands whose
-EXACT bytes matter, and on interactive commands. But the DEFAULT is "use them",
-not "remember to use them". Proxy-free -- no proxy or MITM layer (rejected with
-the headroom plugin).
+The DEFAULT is "pipe everything", not "pipe the noisy ones". Proxy-free -- no
+proxy or MITM layer (rejected with the headroom plugin).
 
 WHY it cannot be a silent auto-interceptor (be honest): a Claude Code hook
 CANNOT rewrite a Read/Grep/MCP tool result before the model sees it (hard limit,
@@ -985,7 +1054,7 @@ The same rule applies to **emoji-style** decorative glyphs and any visually simi
 - check / OK / pipa (all colors, weights, and box variants): check mark (U+2713), heavy check (U+2714), check w/ VS-16 (U+2714 U+FE0F), white heavy check on green (U+2705), ballot box w/ check (U+2611), light check (U+1F5F8), ballot box w/ bold check (U+1F5F9)
 - fail / wrong / X mark (all colors, weights, and box variants): multiplication x (U+2715), heavy multiplication x (U+2716), ballot x (U+2717), heavy ballot x (U+2718), red cross mark (U+274C), green negative squared cross (U+274E), ballot box w/ x (U+2612), cancellation x (U+1F5D9), ballot script x (U+1F5F4), ballot script x w/ box (U+1F5F5), ballot box w/ bold script x (U+1F5F7)
 - info source: information source (U+2139), circled information source (U+1F6C8)
-- warning / alert: warning sign `⚠️` (U+26A0, with or without the U+FE0F variation selector — bans both `⚠` and `⚠️`), no entry `⛔` (U+26D4), police light `🚨` (U+1F6A8)
+- warning / alert: warning sign `⚠️` (U+26A0, with or without the U+FE0F variation selector — bans both `⚠` and `⚠️`), no entry `⛔` (U+26D4), police light `🚨` (U+1F6A8), shield `🛡️` (U+1F6E1), broom `🧹` (U+1F9F9)
 - status dots: green/red/yellow/blue circles `🟢🔴🟡🔵` (U+1F7E2..U+1F7E6), large circles `⚫⚪🟠🟣🟤` family
 - thumbs / hands: thumbs up/down `👍👎` (U+1F44D/U+1F44E), pointing hands `👉👈👆👇`
 - decoration: sparkles `✨` (U+2728), star `⭐🌟` (U+2B50/U+1F31F), fire `🔥` (U+1F525), rocket `🚀` (U+1F680), party `🎉🎊`, hundred `💯`, direct hit / target `🎯` (U+1F3AF)
@@ -1122,6 +1191,18 @@ When the user types `/hermes-curate` or `/hermes-learn`, invoke the Skill tool w
 - **graphify** (`~/.claude/skills/graphify/SKILL.md`) — any input (code, docs, papers, images) into a queryable knowledge graph with clustered communities, HTML + JSON + audit report. Source: <https://github.com/safishamsi/graphify> (`v1` branch, MIT). The skill body shells out to the `graphify` CLI; this requires `pip install graphifyy` (note: double-y; Python 3.10+). Trigger: `/graphify` (also `/graphify <path>`, `/graphify add <url>`, `/graphify query <q>`, `/graphify path A B`, `/graphify explain X`, plus `--mode deep`, `--update`, `--watch`, `--wiki`, `--svg`, `--graphml`, `--neo4j`, `--mcp` flags).
 
 When the user types `/graphify`, invoke the Skill tool with `skill: "graphify"` before doing anything else.
+
+### Fable orchestration
+
+- **fable-orchestration** (`~/.claude/skills/fable-orchestration/SKILL.md`) — how to prompt Claude Fable 5 as an orchestrating architect that delegates token-heavy work to Opus 4.8 executors. Two wiring patterns: (1) advisor mode: set active model to Opus 4.8, then `/advisor fable`; (2) architect+delegate: Fable writes the plan, parallel Opus subagents execute. Effort-level routing (`/effort low|medium|high|xhigh|max`; default `high`) is the cost lever. Paste-in prompt kit: act-dont-overplan, delegate-to-subagents, ground-progress-claims, verify-with-fresh-eyes, autonomous-run. HARD DONT: NEVER tell Fable to "show/explain your reasoning" -- it silently reroutes to Opus 4.8. Trigger: any prompt about Fable orchestration, "advisor mode", "route Fable to Opus", setting up a Fable-driven pipeline, or `fable` in context of architecture/delegation.
+
+### Fable legacy inheritance (FABLE5_LEGACY_INDEX.md)
+
+FABLE5_LEGACY.md (726 lines, installed at `~/.claude/fable-legacy/FABLE5_LEGACY.md` so it is reachable from EVERY project; source of truth: `D:\projects\super_claude\fable-legacy-4-opus_sonnet\FABLE5_LEGACY.md` -- re-copy on change) is Fable 5's distilled intelligence protocol: 36 failure-mode names, 12-item pre-send review, 8 character foundations, domain craft appendices. It is NEVER injected every turn. Instead:
+- Load `~/.claude/fable-legacy/FABLE5_LEGACY_INDEX.md` (small -- chapter map + task-type routing table + all 36 names listed). qRem loads this index at orientation when the active model is Opus/Sonnet.
+- Pull chapters ON DEMAND when the task type matches: coding/agentic -> Ch 8A; before shipping any deliverable -> Ch 4 (short circuit: items 1, 2, 7, 12); mid-task failure -> Ch 6 by name; under pushback -> Ch 7.5; any task -> Ch 1. Full routing table in the index file.
+- Session-level inheritance: when the active model is Opus/Sonnet (not Fable-class), consult the relevant chapter. When the active model IS Fable 5, skip -- it is the source.
+- The 36 failure-mode names (Ch 6) are load-bearing -- learn them cold. A failure mode you can NAME mid-task is one you can catch mid-task: PREMATURE YES | HELPFUL INVENTION | AUTOCOMPLETE REASONING | COMPILES IN MY HEAD | CONSTRAINT EVAPORATION | FIRST-READ LOCK-IN | POLARITY FLIP | FLUENCY HALO | HEDGE FOG | EFFORT COLLAPSE | GOAL DRIFT | EXAMPLE TUNNEL | LEVEL MISMATCH | PHANTOM SOURCE | PREMATURE OPTIMIZATION | REFLEX GATE | PARAPHRASE DRIFT | GENEROSITY CREEP | APOLOGY SPIRAL | DOUBLE-DOWN | PUSHBACK CAVE | SELF-CONSISTENCY THEATER | AUTHORITY LAUNDERING | CERTAINTY INFLATION | STALE STATE | HAPPY PATH MYOPIA | LAST-MILE SKIP | SUBSTITUTION ANSWER | TOOL AMNESIA | COUNT MISMATCH | VERSION BLUR | PARTIAL READ | SUNK-COST CONTINUATION | CONTEXT CONTAMINATION | FORMAT OVER SUBSTANCE | EMPATHY MISFIRE.
 
 ## Not for this directory
 
