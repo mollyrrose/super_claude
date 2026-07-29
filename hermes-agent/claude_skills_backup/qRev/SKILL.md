@@ -78,9 +78,17 @@ python "$HOME\.claude\scripts\lib\run_semgrep_loop.py" `
   --repo-root . `
   --scope-file $scope `
   > .scratch/qrev-semgrep.json
+
+# Also collect Cursor MDC rules (non-blocking -- empty if project does not use Cursor)
+python "$HOME\.claude\scripts\lib\read_cursor_rules.py" `
+  --repo-root . `
+  --scope-file $scope `
+  > .scratch/qrev-cursor-rules.txt
 ```
 
 Then parse the JSON: `results[]` is the merged finding list, `skipped[]` is the list of files the helper had to give up on (record these in the report's "Coverage gaps" section, do NOT silently drop them).
+
+**Cursor MDC rules** (`qrev-cursor-rules.txt`): inject the content into Phase B agent prompts as additional PROJECT CONVENTIONS authority alongside `.cursorrules`. These are the project's own Cursor IDE coding rules (`.cursor/rules/**/*.mdc`) — `alwaysApply: true` rules apply to all files; glob-scoped rules apply only to matched scope files. If the file is empty, no Cursor rules are present in this project.
 
 If Phase A returns **SHIP-BLOCK** (any `blocking` finding), the overall qRev verdict is SHIP-BLOCK regardless of Phase 0 / Phase B. Print Phase 0 + Phase A combined report and stop.
 

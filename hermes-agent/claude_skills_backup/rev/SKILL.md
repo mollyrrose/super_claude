@@ -121,7 +121,7 @@ Phase B findings (from the agent fleet, post-synthesis) are also appended to the
    - Default mode: cap at ~80 files
    - `exhaustive` / `full`: cap at ~150 files
    - If larger, narrow to changed-only via `git diff --name-only`
-5. **Read context files**: `INDEX.md`, `TODO.md`, `STARTUP.md`, `CLAUDE.md`, `.cursorrules`, `ARCHITECTURE.md`, `README.md`. These get baked into every agent's prompt as project-convention authority.
+5. **Read context files**: `INDEX.md`, `TODO.md`, `STARTUP.md`, `CLAUDE.md`, `.cursorrules`, `ARCHITECTURE.md`, `README.md`. These get baked into every agent's prompt as project-convention authority. Also read **Cursor MDC rules** if the project uses Cursor: run `python ~/.claude/scripts/lib/read_cursor_rules.py --repo-root . --scope-file <scope-file>` to collect all `alwaysApply: true` rules and any glob-matched rules from `.cursor/rules/**/*.mdc`; inject the output into the PROJECT CONVENTIONS block alongside `.cursorrules`. Non-blocking: if `.cursor/rules/` is absent, nothing is emitted.
 6. **Secret-leak preflight**: before sharing scope with agents, grep the scope file list for staged `*.env*`, `*.pem`, `*.key`, `id_rsa*`, hardcoded `sk-`, `Bearer ` literals. If any match → abort, warn user, do not launch agents (defence-in-depth — never broadcast secrets into the agent fleet).
 7. **State the plan** to the user in 3–5 lines: scope (which files), agents (count + names), skill bundles (per-agent skill count), mode, expected wall-clock (~5–12 min single-pass, ~15–30 min exhaustive).
 
@@ -168,7 +168,7 @@ Do NOT launch on a 1-file change — fall back to `/qMin` and tell the user.
 
 ## Skill-bundle map (≤7 skills per agent)
 
-Every bundle implicitly includes the repo's **convention files** (`.cursorrules`, `CLAUDE.md`, `INDEX.md` if present) — those count as 0 against the cap because they're authority, not reference. Soft cap is 7; agents pick relevance from the bundle and are not required to apply every skill.
+Every bundle implicitly includes the repo's **convention files** (`.cursorrules`, `.cursor/rules/**/*.mdc` MDC rules, `CLAUDE.md`, `INDEX.md` if present) — those count as 0 against the cap because they're authority, not reference. Soft cap is 7; agents pick relevance from the bundle and are not required to apply every skill.
 
 | Agent | Skill bundle (read at session start, apply checklists) |
 |---|---|
@@ -210,7 +210,8 @@ SCOPE (absolute paths, ~<N> files):
 
 PROJECT CONVENTIONS (authoritative — override generic best-practice):
 - Read: <abs path>/CLAUDE.md
-- Read: <abs path>/.cursorrules
+- Read: <abs path>/.cursorrules (legacy flat file)
+- Cursor MDC rules: python ~/.claude/scripts/lib/read_cursor_rules.py --repo-root <abs path> --scope-file <scope-file>  (reads .cursor/rules/**/*.mdc; empty output = no rules present)
 - Read: <abs path>/INDEX.md
 
 SKILL BUNDLE (read at session start, apply each skill's checklist to the scope):
