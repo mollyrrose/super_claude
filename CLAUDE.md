@@ -86,7 +86,8 @@ UNCHANGED -- they still run standalone and their `*_smoketest.py` still pass.
   a stderr message) propagates: the dispatcher re-emits that stderr and exits 2.
 - `UserPromptSubmit` -> `hook_dispatch.py UserPromptSubmit`, which runs
   `curator_prompt_hook.py`, `smart_router_prompt_hook.py`, `context_budget_gate.py`,
-  `qrev_auto_inject.py`, `coord_prompt_hook.py` (in that order). Each hook emits a
+  `qrev_auto_inject.py`, `coord_prompt_hook.py`, `memgraph_prompt_hook.py` (in that
+  order). Each hook emits a
   `hookSpecificOutput.additionalContext` JSON (or nothing); the dispatcher
   extracts every hook's `additionalContext` and emits ONE merged JSON object
   (blank-line-joined, original order preserved) -- equivalent to how Claude Code
@@ -105,7 +106,10 @@ UNCHANGED -- they still run standalone and their `*_smoketest.py` still pass.
   registers this window on the cross-window coordination board and injects the
   standing protocol at startup (see "Cross-window coordination" below). Backup at
   `~/.claude/settings.json.bak.pre-coord-sessionstart`.
-- `SessionEnd`: `rev_learn_sessionend.py` (async, single hook, not dispatched)
+- `SessionEnd`: `rev_learn_sessionend.py` then `memgraph_sessionend.py` (both
+  async, separate commands — SessionEnd is not a hot path). `memgraph_sessionend.py`
+  queues the session for level-5 memory ingestion (see "Level-5 memory layer"
+  below); backup at `~/.claude/settings.json.bak.pre-memgraph`.
 
 Kill switch for the dispatcher: revert the `UserPromptSubmit`/`PostToolUse`
 arrays in `settings.json` to the per-hook command list (a backup is at
@@ -127,10 +131,39 @@ Super_claude-specific notes:
 - `.worktrees/` is already listed in this repo's `.gitignore`.
 - The canonical worktree path here is `D:\projects\super_claude\.worktrees\<branch>\`.
 
+## Level-5 memory layer (memgraph + graphify)
+
+The file-based memory (`~/.claude/projects/D--projects-super-claude/memory/`)
+is "level 5" of the 5-level second-brain model (router -> wiki/index ->
+semantic search -> knowledge graph -> always-on): a knowledge graph is built
+over the memory files and refreshed automatically from session transcripts.
+Full briefing: `exclude/SYSTEM_STRATEGIES/memory_levels_briefing.md`.
+
+- **Graph home:** `~/.claude/memory-graph/graphify-out/` (`graph.json`,
+  `graph.html` visual, `GRAPH_REPORT.md`). Engine: `graphifyy` (PyPI, 0.8.x)
+  on `C:\Python313` — manually audited 2026-07-31 (see
+  `~/.claude/.skillspector_log.jsonl`; the skillspector 100/CRITICAL score was
+  judged a calibration false positive after hand-audit, user-approved).
+- **Query:** `cd ~/.claude/memory-graph && python -m graphify query "<q>"`
+  (semantic start-node + BFS relations); `brain_query.py facts <topic>` stays
+  the deterministic keyword layer.
+- **Always-on loop:** `scripts/memgraph_sessionend.py` (SessionEnd) queues
+  sessions -> `scripts/memgraph_prompt_hook.py` (UserPromptSubmit, in the
+  dispatcher REGISTRY) nudges when >=2 sessions or >=48h pending -> the
+  `memgraph-ingest` skill drains: extracts evergreen facts into memory files,
+  updates MEMORY.md, refreshes the graph. Smoketests:
+  `memgraph_sessionend_smoketest.py`, `memgraph_prompt_hook_smoketest.py`.
+- **Kill switch:** `MEMGRAPH_DISABLE=1` disables queue+nudge+skill; remove the
+  REGISTRY entry / SessionEnd command to unwire; delete
+  `~/.claude/.memgraph_queue.json` to reset. Same change discipline as the
+  other hooks (silent no-op on bad input, smoketest before trusting, copy to
+  `~/.claude/scripts/` after edit).
+
 ## State files (gitignored, don't commit)
 
 - `~/.claude/.hermes_curator_queue.json`, `.hermes_curator_state.json` — curator queue.
 - `~/.claude/.qrev_auto_state.json` — auto-qRev counters.
+- `~/.claude/.memgraph_queue.json`, `.memgraph_state.json` — level-5 memory ingestion queue/state; `~/.claude/memory-graph/` — the generated memory knowledge graph.
 - `~/.claude/.statusline_baselines.json` — per-session context-bar baselines.
 - `~/.claude/.ecc-session-bridge/` — session metrics for the statusline.
 - `D:\projects\super_claude\hermes-agent\claude_code_integration\ruvector.db` and the top-level `ruvector.db` — embeddings / skill state.

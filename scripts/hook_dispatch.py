@@ -82,6 +82,7 @@ REGISTRY: dict[str, list[tuple[str, Path]]] = {
         ("context_budget_gate", _SCRIPTS_DIR / "context_budget_gate.py"),
         ("qrev_auto_inject", _SCRIPTS_DIR / "qrev_auto_inject.py"),
         ("coord_prompt_hook", _SCRIPTS_DIR / "coord_prompt_hook.py"),
+        ("memgraph_prompt_hook", _SCRIPTS_DIR / "memgraph_prompt_hook.py"),
     ],
     "PostToolUse": [
         ("semgrep_postedit_hook", _SCRIPTS_DIR / "semgrep_postedit_hook.py"),
