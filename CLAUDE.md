@@ -6,6 +6,16 @@ This file extends the global `~/.claude/CLAUDE.md` with rules specific to this r
 
 `super_claude` is the personal Claude Code setup: hook scripts in `~/.claude/scripts/`, the curator and skill-lifecycle Python modules under `hermes-agent/claude_code_integration/`, and a `claude_skills_backup/` of ~165 skills that get installed into `~/.claude/skills/`. See `README.md` for the full feature catalog.
 
+## Preflight checklist before implementation (pre-code, not a substitute for /qRev)
+
+Before starting non-trivial coding work in this repo, check for known constraints on the area being touched instead of only finding out from `/qRev` after the diff exists:
+
+- Check `CODING_STANDARDS.md` (if present) and any Cursor MDC rules (`.cursor/rules/**/*.mdc`) that apply to the touched path.
+- Check `<repo>/.claude/review-log/findings.jsonl` for recurring past findings (source: `semgrep` / `rev-standards` / agent fleet) already logged against the same file or area.
+- If a recurring pattern applies, state it in the plan before writing the code, not after.
+
+This is a lightweight, static preflight, not a lighter `/qRev`. It cannot review code that doesn't exist yet, so it only surfaces already-known standards/recurring issues — it does not catch new implementation-level bugs, which still need the post-diff agent fleet. Full review still runs per "Review gates: run the review, don't ask" (global `~/.claude/CLAUDE.md`) — this checklist only moves *known, already-logged* lessons earlier, it does not remove the need for `/qRev` on the actual diff.
+
 ## Questions to the user — always pair with a plain-logic restatement
 
 This MIRRORS the global "Plain-language questions to the user" rule (now the dual-layer form) and is restated here so it's visible inside the project too. Every time you ask the user anything (clarifying question, A/B/C choice, yes/no, approval gate, "which option"), do not just rewrite the question into plain language — keep the normal (possibly technical) question AND add a simplified-logic restatement directly **underneath** it.
