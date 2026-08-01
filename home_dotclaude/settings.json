@@ -42,6 +42,7 @@
     ],
     "deny": []
   },
+  "model": "claude-fable-5[1m]",
   "hooks": {
     "Stop": [
       {
@@ -105,6 +106,12 @@
             "command": "\"[PY]\" \"C:\\Users\\[USER]\\.claude\\scripts\\rev_learn_sessionend.py\"",
             "timeout": 8,
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "\"[PY]\" \"C:\\Users\\[USER]\\.claude\\scripts\\memgraph_sessionend.py\"",
+            "timeout": 8,
+            "async": true
           }
         ]
       }
@@ -151,9 +158,11 @@
       }
     }
   },
+  "effortLevel": "xhigh",
   "autoUpdatesChannel": "latest",
+  "tui": "fullscreen",
+  "skipWorkflowUsageWarning": true,
   "theme": "dark",
   "autoCompactEnabled": true,
-  "skipAutoPermissionPrompt": true,
-  "tui": "fullscreen"
+  "skipAutoPermissionPrompt": true
 }

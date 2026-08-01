@@ -672,7 +672,7 @@ def main(argv=None):
     parts = _strip_leading_dashdash(args.command)
     command = " ".join(parts) if parts else None
     # On Windows, spaces in path components break cmd.exe shell parsing (e.g.
-    # "C:/Users/Seal Josephson/..." splits at the space). Use list2cmdline to
+    # "C:/Users/Jane Doe/..." splits at the space). Use list2cmdline to
     # produce double-quoted tokens that cmd.exe understands.  The unquoted
     # `command` string is still used as the rule-matching subject so that rule
     # names like "git status" keep working unchanged.

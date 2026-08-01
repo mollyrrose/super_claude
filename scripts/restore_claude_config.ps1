@@ -100,7 +100,7 @@ if (-not $NoScripts) {
 
 # --- skills ---
 if (-not $NoSkills) {
-  $sb = Join-Path $repoRoot 'claude_skills_backup'
+  $sb = Join-Path $repoRoot 'hermes-agent\claude_skills_backup'
   if (Test-Path $sb) {
     $kdst = Join-Path $ClaudeHome 'skills'
     New-Item -ItemType Directory -Force -Path $kdst | Out-Null

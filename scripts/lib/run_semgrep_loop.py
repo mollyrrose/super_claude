@@ -51,15 +51,23 @@ from typing import Iterable
 
 def _extend_path_for_semgrep() -> None:
     """Prepend user Python Scripts dirs to PATH so shutil.which finds semgrep
-    even when Claude Code launched from a different Python installation."""
+    even when Claude Code launched from a different Python installation.
+
+    Globs any PythonXY version under the standard per-user install roots
+    instead of pinning a specific version, so this keeps working across
+    Python upgrades / reinstalls without an edit."""
     if shutil.which("semgrep"):
         return
-    candidates = [
-        os.path.expandvars(r"%APPDATA%\Python\Python313\Scripts"),
-        os.path.expandvars(r"%LOCALAPPDATA%\Programs\Python\Python313\Scripts"),
-        r"D:\AppData\Python\Python313\Scripts",
-        os.path.expandvars(r"%USERPROFILE%\AppData\Roaming\Python\Python313\Scripts"),
+    import glob as _glob
+
+    roots = [
+        os.path.expandvars(r"%APPDATA%\Python"),
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\Python"),
+        os.path.expandvars(r"%USERPROFILE%\AppData\Roaming\Python"),
     ]
+    candidates = []
+    for root in roots:
+        candidates.extend(_glob.glob(os.path.join(root, "Python3*", "Scripts")))
     for cand in candidates:
         if os.path.isfile(os.path.join(cand, "semgrep.exe")):
             os.environ["PATH"] = cand + os.pathsep + os.environ.get("PATH", "")

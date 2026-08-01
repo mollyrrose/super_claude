@@ -20,9 +20,12 @@ import os
 import random
 import re
 import sys
+from pathlib import Path
 
 
-DEFAULT_PERSONAS_DIR = r"C:\Users\Seal Josephson\.claude\skills\focus-group\references"
+# Relative to this script's own install location (.../skills/design-full/scripts/),
+# not a hardcoded user/drive, so it resolves correctly on any machine.
+DEFAULT_PERSONAS_DIR = str(Path(__file__).resolve().parents[2] / "focus-group" / "references")
 
 # Default quota for n=24 across panels (panel_name -> count).
 # Panel name matches filename prefix before "-personas.md".

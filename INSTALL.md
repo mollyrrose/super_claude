@@ -17,36 +17,71 @@ out with secrets filled from the environment.
   machine: de-tokenizes paths, fills secrets from env vars, copies `scripts/*.py,
   *.js` and the skills backup, backs up any existing `settings.json` first.
 
+### Full personal state (private, not in git)
+
+The two scripts above only cover what's safe to commit. Personal state that
+git never sees — memory, auto-learned `hermes-auto-*` skills, decision logs,
+curator/qrev counters — lives in the gitignored `exclude/windows_reinstall_backup/`
+and is handled by a second, parallel pair of scripts using the SAME
+`[USER]`/`[PY]`/`[REPO]` tokenization scheme (so no absolute path or Windows
+username is ever hardcoded in either):
+
+- `scripts/backup_claude_state.ps1` — LIVE -> `exclude/windows_reinstall_backup/dotclaude/`.
+  Tokenizes `settings.json`/`settings.local.json` the same way `sync_claude_config.ps1`
+  does, but does NOT redact secrets (this destination is private, not committed).
+- `scripts/restore_claude_state.ps1` — that backup -> LIVE, on any machine or
+  any renamed Windows profile. De-tokenizes `[USER]`/`[PY]`/`[REPO]`
+  automatically for whatever machine it runs on, and also installs the full
+  skill bundle from `hermes-agent/claude_skills_backup/`.
+
+See `exclude/windows_reinstall_backup/RESTORE_GUIDE.md` for the full restore
+walkthrough (Python/Node install, plugin install, verification steps).
+
 ## Keep the repo current (existing machine)
 
 After changing `~/.claude/settings.json` or `~/.claude/CLAUDE.md`:
 
 ```powershell
-pwsh D:\projects\super_claude\scripts\sync_claude_config.ps1
-git -C D:\projects\super_claude diff home_dotclaude\   # review
-git -C D:\projects\super_claude add home_dotclaude\ ; git commit -m "chore: sync claude config" ; git push
+powershell -File <repo-root>\scripts\sync_claude_config.ps1
+git -C <repo-root> diff home_dotclaude\   # review
+git -C <repo-root> add home_dotclaude\ ; git commit -m "chore: sync claude config" ; git push
+```
+
+Got a personal machine handy (memory, auto-learned skills, decision logs)?
+Refresh that snapshot too before anything risky:
+```powershell
+powershell -File <repo-root>\scripts\backup_claude_state.ps1
 ```
 
 ## Rebuild on a new machine
 
 1. Install **Python 3.x** (any drive; on PATH, or set `$env:CLAUDE_PYTHON`) and **Node.js**.
-2. Clone this repo **anywhere** (no specific drive needed — `D:` is not required).
-   Restore fills `[REPO]` from the clone's own location and `[PY]` from the Python
-   it finds, so the layout is portable.
-3. Set the API keys so restore can fill them:
+2. Clone this repo **anywhere** (no specific drive needed — no fixed drive letter
+   is required). Restore fills `[REPO]` from the clone's own location and `[PY]`
+   from the Python it finds, so the layout is portable.
+3. If you have a personal `exclude/windows_reinstall_backup/` snapshot from this
+   same setup (see below), restore everything — settings, memory, skills, hook
+   scripts, state — in one step:
+   ```powershell
+   powershell -File <repo-root>\scripts\restore_claude_state.ps1
+   ```
+   This is the recommended path when rebuilding YOUR OWN machine; it already
+   carries your real API keys. Skip to step 6.
+4. Otherwise (a genuinely fresh clone, no personal backup), set the API keys so
+   the config-only restore can fill them:
    ```powershell
    setx OPENAI_API_KEY   "<key>"
    setx DEEPSEEK_API_KEY "<key>"
    # open a NEW shell so setx values are in the environment
    ```
-4. Restore:
+5. Restore from the git-tracked, sanitized mirror:
    ```powershell
-   pwsh D:\projects\super_claude\scripts\restore_claude_config.ps1
+   powershell -File <repo-root>\scripts\restore_claude_config.ps1
    ```
    Secrets not present in the environment are left as `[REDACTED:<NAME>]` with a
    warning (the script never invents a key) — set them and re-run, or edit
    `~/.claude/settings.json` by hand.
-5. Install the marketplace plugins listed in `settings.json` `enabledPlugins`
+6. Install the marketplace plugins listed in `settings.json` `enabledPlugins`
    (`ecc@ecc`, `ruflo-core@ruflo`) via `/plugin` inside Claude Code.
 
 ## Notes
