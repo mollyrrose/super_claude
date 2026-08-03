@@ -76,8 +76,12 @@ from pathlib import Path
 CLAUDE_DIR = Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude")))
 COORD_ROOT = CLAUDE_DIR / ".coord"
 DEFAULT_STALE = int(os.environ.get("COORD_STALE_SECONDS", "1800"))  # 30 min
-LOCK_TIMEOUT = 10.0   # seconds to wait for the cross-process lock
+LOCK_TIMEOUT = 10.0   # seconds to wait for the cross-process lock (CLI ops)
 LOCK_STALE = 60.0     # break a lock dir older than this (a crashed holder)
+# Per-turn hook budget: a board refresh can wait a turn, a user prompt cannot.
+# If the lock is busy longer than this, hook_tick skips silently instead of
+# stalling the UserPromptSubmit dispatcher toward its 20s timeout.
+HOOK_LOCK_TIMEOUT = float(os.environ.get("COORD_HOOK_LOCK_TIMEOUT", "2.0"))
 EVENTS_KEEP = 25      # recent activity lines retained in work.md
 
 
@@ -119,8 +123,19 @@ def repo_identity(cwd: str | None = None) -> tuple[str, str | None, str | None]:
     of one repo. Falls back to cwd when not in a git repo. cwd lets a caller
     (e.g. the prompt hook) resolve a repo other than the process cwd WITHOUT an
     in-process chdir (which would corrupt sibling hooks in the dispatcher)."""
-    common = _git(["rev-parse", "--git-common-dir"], cwd=cwd)
-    branch = _git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd)
+    # One git spawn instead of two: rev-parse prints the common dir and the
+    # abbreviated HEAD ref on separate lines. A cold git.exe start costs
+    # ~1-2.5s on Windows, and this runs on every prompt via the hook.
+    combined = _git(["rev-parse", "--git-common-dir", "--abbrev-ref", "HEAD"], cwd=cwd)
+    if combined is not None:
+        parts = combined.splitlines()
+        common = (parts[0].strip() or None) if parts else None
+        branch = parts[1].strip() if len(parts) > 1 and parts[1].strip() else None
+    else:
+        # Rare split fallback (e.g. unborn HEAD makes --abbrev-ref fail while
+        # the common dir is still resolvable) -- keeps the repo key stable.
+        common = _git(["rev-parse", "--git-common-dir"], cwd=cwd)
+        branch = _git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd)
     if common:
         # git -C resolves relative to cwd, so make absolute against it
         cp = Path(common)
@@ -146,29 +161,58 @@ def journal_dir(cwd: str | None = None) -> Path:
 
 # --------------------------------------------------------------------------- locking
 
-def _acquire_lock(lock: Path) -> bool:
-    """Atomic cross-process lock via mkdir (works identically on Windows/POSIX)."""
-    deadline = time.time() + LOCK_TIMEOUT
+def _acquire_lock(lock: Path, timeout: float = LOCK_TIMEOUT) -> bool:
+    """Atomic cross-process lock via mkdir (works identically on Windows/POSIX).
+
+    EVERY path is bounded by `timeout`, including the stale-break path. An
+    earlier version did `continue` immediately after a failed rmdir -- skipping
+    both the deadline check and the sleep -- so a stale lock that could NOT be
+    removed (a non-empty dir left by a holder that died mid-write, or a handle
+    held by AV/indexer on Windows) spun this loop forever at full CPU. Reached
+    through the UserPromptSubmit hook that hung EVERY prompt in EVERY window on
+    the repo until Claude Code killed the hook at 20s and discarded all the
+    injected context ("UserPromptSubmit hook timed out after 20s").
+    """
+    deadline = time.time() + timeout
     while True:
         try:
             lock.mkdir(parents=False, exist_ok=False)
             return True
         except FileExistsError:
-            # break a stale lock left by a crashed holder
-            try:
-                if (time.time() - lock.stat().st_mtime) > LOCK_STALE:
-                    try:
-                        lock.rmdir()
-                    except OSError:
-                        pass
-                    continue
-            except OSError:
-                pass
-            if time.time() >= deadline:
-                return False
-            time.sleep(0.05)
+            _break_if_stale(lock)
         except OSError:
             return False
+        if time.time() >= deadline:
+            return False
+        time.sleep(0.05)
+
+
+def _break_if_stale(lock: Path) -> None:
+    """Best-effort removal of a lock left behind by a crashed holder.
+
+    Never raises and never blocks: on failure the caller simply retries until
+    its own deadline. Also handles the non-empty case (debris from a holder
+    that died mid-write), which a plain rmdir cannot remove.
+    """
+    try:
+        if (time.time() - lock.stat().st_mtime) <= LOCK_STALE:
+            return
+    except OSError:
+        return
+    try:
+        lock.rmdir()
+        return
+    except OSError:
+        pass
+    try:
+        for leftover in lock.iterdir():
+            try:
+                leftover.unlink()
+            except OSError:
+                pass
+        lock.rmdir()
+    except OSError:
+        pass
 
 
 def _release_lock(lock: Path) -> None:
@@ -352,8 +396,10 @@ def hook_tick(session: str | None, cwd: str | None = None,
     if not session:
         return {}
     sid = session[:6]
-    d = journal_dir(cwd)
-    _, main_root, branch = repo_identity(cwd)
+    # Resolve identity ONCE (journal_dir would run repo_identity a second
+    # time -- that used to double the git-spawn cost on every prompt).
+    key, main_root, branch = repo_identity(cwd)
+    d = COORD_ROOT / key
 
     def op():
         state = _load_state(d)
@@ -389,16 +435,16 @@ def hook_tick(session: str | None, cwd: str | None = None,
                 "requests_for_me": _requests_for(state, sid, branch),
                 "answers_for_me": _answers_for(state, sid)}
 
-    r = _with_lock(d, op)
+    r = _with_lock(d, op, timeout=HOOK_LOCK_TIMEOUT)
     return r if isinstance(r, dict) else {}
 
 
 # --------------------------------------------------------------------------- commands
 
-def _with_lock(d: Path, fn):
+def _with_lock(d: Path, fn, timeout: float = LOCK_TIMEOUT):
     d.mkdir(parents=True, exist_ok=True)
     lock = d / ".lock"
-    if not _acquire_lock(lock):
+    if not _acquire_lock(lock, timeout):
         sys.stderr.write("coord: could not acquire lock\n")
         return 2
     try:

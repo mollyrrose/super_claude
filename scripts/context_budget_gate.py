@@ -84,7 +84,12 @@ _ONE_MILLION_MARKERS = ("[1m]", "-1m", "_1m", "1m-context", "1m_context")
 # Opus is run with the extended context. This family list is what actually
 # catches the 1M model after the "[1m]" suffix has been stripped. Adjust it (or
 # set CC_CONTEXT_LIMIT) if your account runs these models at the 200K window.
-_ONE_MILLION_FAMILIES = ("opus-4",)
+# ROT WARNING: when a new top-tier model generation lands (Opus 6, Fable 6...),
+# ADD IT HERE, or the gate silently falls back to 200K and starts telling the
+# model "context nearly full" at ~18% real usage of the 1M window (this exact
+# bug shipped once: the list said only "opus-4" while the setup ran Opus 5 /
+# Fable 5 [1m], fixed 2026-08-03).
+_ONE_MILLION_FAMILIES = ("opus-4", "opus-5", "fable")
 
 # GLM (z.ai) model-id substrings. When the active provider is z.ai the served
 # model id is "glm-..." (e.g. glm-4.6, GLM-5.2), NOT an Anthropic id, so this

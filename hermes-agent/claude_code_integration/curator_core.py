@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 import time
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
@@ -247,7 +248,10 @@ def should_remind() -> Optional[str]:
         "zero auto-skills is the expected result most of the time. Then "
         "clear the queue by running this command with the listed session IDs "
         "and the count of auto-skills you wrote piped to stdin as JSON: "
-        "`\"C:\\Python313\\python.exe\" "
+        # Resolve the interpreter at runtime. A hardcoded path silently rots the
+        # moment Python is upgraded or the OS is reinstalled (C:\Python313 ->
+        # C:\Python314 broke every drain until this was found, 2026-08-03).
+        f"`\"{sys.executable or 'python'}\" "
         "\"D:/Projects/super_claude/hermes-agent/claude_code_integration/mark_drained_cli.py\"` "
         "— stdin payload shape: "
         "`{\"session_ids\": [\"<id1>\", \"<id2>\", ...], \"candidates_written\": <M>}`. "
