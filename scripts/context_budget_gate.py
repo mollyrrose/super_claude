@@ -100,6 +100,63 @@ _GLM_FAMILIES = ("glm",)
 GLM_CONTEXT_LIMIT = int(os.environ.get("CC_GLM_CONTEXT_LIMIT", "200000"))
 
 
+# Claude Code hands its OWN context_window.remaining_percentage to the
+# statusline, which records it per session in this file. That number is the
+# harness's ground truth; everything below (transcript token sum / model-id
+# window lookup) is only an ESTIMATE of it. Preferring the recorded value is
+# what stops the gate and the statusline from ever contradicting each other --
+# the failure the user hit repeatedly: gate insisting "context nearly full,
+# run /qClose" while the bar showed ~15% used, because the active model was
+# missing from _ONE_MILLION_FAMILIES and the gate budgeted 200K for a 1M window.
+STATUSLINE_BRIDGE = os.environ.get("CC_BUDGET_BRIDGE_PATH", "").strip() or os.path.expanduser(
+    "~/.claude/.statusline_baselines.json"
+)
+BRIDGE_TTL_SEC = int(os.environ.get("CC_BUDGET_BRIDGE_TTL", "1800"))
+# Only the transcript tail is parsed: the newest records are last, and re-reading
+# a multi-MB JSONL twice per prompt (once for usage, once for the model id) cost
+# seconds on a large session.
+TRANSCRIPT_TAIL_BYTES = int(os.environ.get("CC_BUDGET_TAIL_BYTES", str(512 * 1024)))
+
+
+def _bridge_remaining_pct(session_id: str):
+    """Harness-reported remaining-% for this session, or None if unavailable.
+
+    None (not a guess) whenever the file is missing, the session has no entry,
+    the entry predates BRIDGE_TTL_SEC, or the value is not a sane 0-100 number.
+    The caller then falls back to the transcript estimate.
+    """
+    if not session_id:
+        return None
+    try:
+        from datetime import datetime, timezone
+
+        with open(STATUSLINE_BRIDGE, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if not isinstance(data, dict):
+            return None
+        # The statusline sanitises the session id before using it as a key.
+        safe = "".join(ch for ch in str(session_id) if ch.isalnum() or ch in "_-")
+        entry = data.get(safe) or data.get(session_id)
+        if not isinstance(entry, dict):
+            return None
+        val = entry.get("remaining")
+        if not isinstance(val, (int, float)) or not (0 <= val <= 100):
+            return None
+        ts = entry.get("ts")
+        if isinstance(ts, str) and ts.strip():
+            try:
+                seen = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                if (datetime.now(timezone.utc) - seen).total_seconds() > BRIDGE_TTL_SEC:
+                    return None
+            except ValueError:
+                return None
+        else:
+            return None
+        return float(val)
+    except Exception:
+        return None
+
+
 def _read_payload() -> dict:
     try:
         raw = sys.stdin.read()
@@ -139,20 +196,49 @@ def _candidate_transcript_paths(payload: dict) -> list[str]:
     return candidates
 
 
+_TAIL_CACHE: dict[int, list] = {}
+
+
 def _walk_transcript(payload: dict):
-    """Yield (record_dict, raw_line) pairs from the first readable transcript."""
+    """Yield (record_dict, raw_line) pairs from the first readable transcript.
+
+    Only the last TRANSCRIPT_TAIL_BYTES are parsed. Both callers want the most
+    RECENT usage / model id, which live at the end, and a full parse of a
+    multi-MB JSONL ran twice per prompt inside a hook that must stay well under
+    its timeout. The parsed tail is cached for the process so the second caller
+    is free.
+    """
     for path in _candidate_transcript_paths(payload):
         try:
-            if not Path(path).is_file():
+            p = Path(path)
+            if not p.is_file():
                 continue
-            with open(path, "r", encoding="utf-8") as fh:
-                for line in fh:
+            key = id(payload)
+            cached = _TAIL_CACHE.get(key)
+            if cached is None:
+                size = p.stat().st_size
+                with open(p, "rb") as fh:
+                    if size > TRANSCRIPT_TAIL_BYTES:
+                        fh.seek(size - TRANSCRIPT_TAIL_BYTES)
+                        blob = fh.read()
+                        # The seek can land mid-line (and mid-codepoint); the
+                        # first partial line is unparseable, so drop it.
+                        nl = blob.find(b"\n")
+                        blob = blob[nl + 1:] if nl >= 0 else b""
+                    else:
+                        blob = fh.read()
+                cached = []
+                for line in blob.decode("utf-8", errors="replace").splitlines():
+                    if not line.strip():
+                        continue
                     try:
                         rec = json.loads(line)
                     except json.JSONDecodeError:
                         continue
                     if isinstance(rec, dict):
-                        yield rec, line
+                        cached.append((rec, line))
+                _TAIL_CACHE[key] = cached
+            yield from cached
             return
         except Exception:
             return
@@ -381,17 +467,32 @@ def main() -> int:
     if not prompt.strip():
         return 0
 
-    used = _latest_usage_tokens(payload)
+    session_id = payload.get("session_id") or payload.get("sessionId")
+    session_id = session_id.strip() if isinstance(session_id, str) else ""
+
     token_limit = _detect_token_limit(payload)
     if token_limit <= 0:
         return 0
-    used_pct = min(100, max(0, round(100 * used / token_limit)))
-    remain_pct = 100 - used_pct
+    used = _latest_usage_tokens(payload)
+
+    # Ground truth first (see STATUSLINE_BRIDGE): the harness's own
+    # remaining-%, so this gate can never disagree with the statusline bar.
+    bridge = _bridge_remaining_pct(session_id)
+    if bridge is not None:
+        remain_pct = int(round(bridge))
+        used_pct = 100 - remain_pct
+        # Keep the projection math consistent with the authoritative split.
+        used = int(token_limit * used_pct / 100)
+        have_signal = True
+    else:
+        used_pct = min(100, max(0, round(100 * used / token_limit)))
+        remain_pct = 100 - used_pct
+        have_signal = used > 0
 
     # Strongest tier first: near-full -> recommend a manual /qClose handoff
     # before the (lossy) auto-compact kicks in. Takes precedence over the
     # soft/projected warning below.
-    if used > 0 and remain_pct <= QCLOSE_REMAIN_PCT:
+    if have_signal and remain_pct <= QCLOSE_REMAIN_PCT:
         decision = {
             "hookSpecificOutput": {
                 "hookEventName": "UserPromptSubmit",
@@ -405,12 +506,11 @@ def main() -> int:
     # headroom) so /qUpd can write the durable docs before the lossy compaction.
     # Fire-once per session (re-fires only after QUPD_REDO_DELTA more % consumed)
     # and requires a session_id to dedupe -- without one we cannot avoid nagging,
-    # so we skip rather than loop.
-    session_id = payload.get("session_id") or payload.get("sessionId")
-    session_id = session_id.strip() if isinstance(session_id, str) else ""
+    # so we skip rather than loop. session_id was resolved above, next to the
+    # bridge lookup that also needs it.
     if (
         not QUPD_DISABLE
-        and used > 0
+        and have_signal
         and session_id
         and remain_pct <= QUPD_REMAIN_PCT
         and _qupd_flush_due(session_id, used_pct)

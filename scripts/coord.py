@@ -66,6 +66,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -82,6 +83,11 @@ LOCK_STALE = 60.0     # break a lock dir older than this (a crashed holder)
 # If the lock is busy longer than this, hook_tick skips silently instead of
 # stalling the UserPromptSubmit dispatcher toward its 20s timeout.
 HOOK_LOCK_TIMEOUT = float(os.environ.get("COORD_HOOK_LOCK_TIMEOUT", "2.0"))
+# A dead recorded pid does NOT kill a window whose heartbeat is younger than
+# this: registrations made through a transient wrapper (see _window_pid) must
+# survive until their next beat re-stamps a live pid. Crashed windows still
+# get GC'd once their heartbeat passes this grace instead of instantly.
+PID_DEAD_GRACE = int(os.environ.get("COORD_PID_DEAD_GRACE", "300"))
 EVENTS_KEEP = 25      # recent activity lines retained in work.md
 
 
@@ -118,24 +124,96 @@ def _git(args: list[str], cwd: str | None = None) -> str | None:
     return out.stdout.strip() or None
 
 
+def _fs_git_identity(cwd: str | None = None) -> tuple[str | None, str | None]:
+    """(git-common-dir abs, branch) read straight off the filesystem, NO subprocess.
+
+    `git rev-parse --git-common-dir --abbrev-ref HEAD` needs a git.exe spawn,
+    measured at 2-3s on this Windows box (three resident AV engines inspect
+    every process launch), and hook_tick runs it on EVERY prompt -- it was 97%
+    of the UserPromptSubmit hook's wall time and the reason the dispatcher kept
+    hitting its timeout. Both facts are plain files, so read them directly:
+
+      - <worktree>/.git is either the git dir itself (normal clone) or a file
+        "gitdir: <path>" (linked worktree / submodule);
+      - a linked worktree's git dir contains `commondir`, whose contents are
+        exactly what --git-common-dir prints;
+      - <gitdir>/HEAD holds "ref: refs/heads/<branch>", or a raw sha when
+        detached -- which --abbrev-ref reports as the literal "HEAD".
+
+    Returns (None, None) for anything unusual (bare repo, unreadable files, not
+    a worktree) so the caller falls back to the git CLI and behaviour is
+    unchanged. Kill switch: COORD_FS_IDENTITY=0 forces the CLI path.
+    """
+    if os.environ.get("COORD_FS_IDENTITY", "1").strip() in ("0", "false", "False"):
+        return None, None
+    try:
+        start = Path(cwd).resolve() if cwd else Path.cwd().resolve()
+        dot = None
+        for d in [start, *start.parents]:
+            cand = d / ".git"
+            if cand.exists():
+                dot = cand
+                break
+        if dot is None:
+            return None, None
+
+        if dot.is_dir():
+            gitdir = dot
+        else:  # linked worktree / submodule: a file pointing at the real gitdir
+            txt = dot.read_text(encoding="utf-8", errors="replace").strip()
+            if not txt.startswith("gitdir:"):
+                return None, None
+            gp = Path(txt.split(":", 1)[1].strip())
+            gitdir = (gp if gp.is_absolute() else dot.parent / gp).resolve()
+
+        common = gitdir
+        cf = gitdir / "commondir"
+        if cf.is_file():
+            rel = cf.read_text(encoding="utf-8", errors="replace").strip()
+            if rel:
+                cp = Path(rel)
+                common = (cp if cp.is_absolute() else gitdir / cp).resolve()
+
+        branch = None
+        head = gitdir / "HEAD"
+        if head.is_file():
+            h = head.read_text(encoding="utf-8", errors="replace").strip()
+            if h.startswith("ref:"):
+                ref = h.split(":", 1)[1].strip()
+                # Keep the full branch path after refs/heads/ -- "feature/x"
+                # must not be truncated to "x" the way a naive rsplit would.
+                branch = ref[len("refs/heads/"):] if ref.startswith("refs/heads/") else ref or None
+            elif h:
+                branch = "HEAD"  # detached; matches `git rev-parse --abbrev-ref`
+        return str(common.resolve()), branch
+    except Exception:
+        return None, None
+
+
 def repo_identity(cwd: str | None = None) -> tuple[str, str | None, str | None]:
     """Return (key, main_worktree_abs, branch). key is stable across all worktrees
     of one repo. Falls back to cwd when not in a git repo. cwd lets a caller
     (e.g. the prompt hook) resolve a repo other than the process cwd WITHOUT an
     in-process chdir (which would corrupt sibling hooks in the dispatcher)."""
-    # One git spawn instead of two: rev-parse prints the common dir and the
-    # abbreviated HEAD ref on separate lines. A cold git.exe start costs
-    # ~1-2.5s on Windows, and this runs on every prompt via the hook.
-    combined = _git(["rev-parse", "--git-common-dir", "--abbrev-ref", "HEAD"], cwd=cwd)
-    if combined is not None:
-        parts = combined.splitlines()
-        common = (parts[0].strip() or None) if parts else None
-        branch = parts[1].strip() if len(parts) > 1 and parts[1].strip() else None
-    else:
-        # Rare split fallback (e.g. unborn HEAD makes --abbrev-ref fail while
-        # the common dir is still resolvable) -- keeps the repo key stable.
-        common = _git(["rev-parse", "--git-common-dir"], cwd=cwd)
-        branch = _git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd)
+    # Filesystem first (no process spawn); the git CLI stays as the fallback for
+    # layouts the file reader declines. Both produce the SAME resolved common
+    # dir, so the derived repo key is identical either way -- existing boards
+    # keep working (asserted in coord_smoketest.py).
+    common, branch = _fs_git_identity(cwd)
+    if common is None:
+        # One git spawn instead of two: rev-parse prints the common dir and the
+        # abbreviated HEAD ref on separate lines. A cold git.exe start costs
+        # ~1-2.5s on Windows, and this runs on every prompt via the hook.
+        combined = _git(["rev-parse", "--git-common-dir", "--abbrev-ref", "HEAD"], cwd=cwd)
+        if combined is not None:
+            parts = combined.splitlines()
+            common = (parts[0].strip() or None) if parts else None
+            branch = parts[1].strip() if len(parts) > 1 and parts[1].strip() else None
+        else:
+            # Rare split fallback (e.g. unborn HEAD makes --abbrev-ref fail while
+            # the common dir is still resolvable) -- keeps the repo key stable.
+            common = _git(["rev-parse", "--git-common-dir"], cwd=cwd)
+            branch = _git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd)
     if common:
         # git -C resolves relative to cwd, so make absolute against it
         cp = Path(common)
@@ -245,20 +323,37 @@ def _save_state(d: Path, state: dict) -> None:
     os.replace(tmp, f)
 
 
-def _pid_alive(pid: int | None, host: str) -> bool | None:
-    """True/False if determinable on this host, else None (unknown -> use heartbeat)."""
+def _pid_alive(pid: int | None, host: str, start: str | None = None) -> bool | None:
+    """True/False if determinable on this host, else None (unknown -> use heartbeat).
+
+    When the recorded process start time is available, a pid that exists but
+    was created at a different time is a REUSED pid -- the original process is
+    gone, so report False rather than a false alive.
+    """
     if not pid or host != socket.gethostname():
         return None
     try:
         import psutil  # type: ignore
-        return psutil.pid_exists(int(pid))
+        if not psutil.pid_exists(int(pid)):
+            return False
+        if start:
+            try:
+                created = datetime.fromtimestamp(
+                    psutil.Process(int(pid)).create_time(), tz=timezone.utc
+                ).strftime("%Y-%m-%dT%H:%M:%SZ")
+                # compare to the minute: sub-second precision is dropped in ISO
+                if created[:16] != start[:16]:
+                    return False
+            except Exception:
+                return None
+        return True
     except Exception:
         return None
 
 
 def _is_live(win: dict, stale: int) -> bool:
-    alive = _pid_alive(win.get("pid"), win.get("host", ""))
-    if alive is False:
+    alive = _pid_alive(win.get("pid"), win.get("host", ""), win.get("start"))
+    if alive is False and _age_seconds(win.get("hb")) > PID_DEAD_GRACE:
         return False
     return _age_seconds(win.get("hb")) <= stale
 
@@ -339,8 +434,60 @@ def _write_work_md(d: Path, state: dict, stale: int) -> None:
 
 # --------------------------------------------------------------------------- helpers
 
+SESSION_TRANSCRIPT_MAX_AGE = int(os.environ.get("COORD_SESSION_TRANSCRIPT_MAX_AGE", "900"))
+
+
+def _session_from_transcripts(start: str | None = None) -> str | None:
+    """Owning window's session id, recovered from the newest transcript on disk.
+
+    Claude Code does NOT export CLAUDE_SESSION_ID into a tool call's shell, so
+    every documented CLI mutation ("claim before editing") died on
+    "coord <cmd>: no session" -- the hook worked (its stdin payload carries the
+    id) but the model's own claims never registered. Claude Code appends to
+    ~/.claude/projects/<slug(cwd)>/<session>.jsonl on every tool call, so the
+    most recently written transcript there belongs to the window running this
+    command: it wrote its tool_use record milliseconds ago. Walk up from cwd
+    because a command may run in a subdirectory of the session's project.
+
+    Returns None (never a guess) when the project dir is unknown or its newest
+    transcript is older than SESSION_TRANSCRIPT_MAX_AGE, so callers keep their
+    existing "no session" behaviour. Kill switch: COORD_SESSION_FROM_TRANSCRIPT=0.
+    """
+    if os.environ.get("COORD_SESSION_FROM_TRANSCRIPT", "1").strip() in ("0", "false", "False"):
+        return None
+    try:
+        root = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "projects"
+        if not root.is_dir():
+            return None
+        d = Path(start).resolve() if start else Path.cwd().resolve()
+        for cand_dir in [d, *d.parents]:
+            slug = re.sub(r"[^A-Za-z0-9]", "-", str(cand_dir))
+            proj = root / slug
+            if not proj.is_dir():
+                continue
+            best, best_mtime = None, 0.0
+            for f in proj.glob("*.jsonl"):
+                try:
+                    m = f.stat().st_mtime
+                except OSError:
+                    continue
+                if m > best_mtime:
+                    best, best_mtime = f.stem, m
+            if best and (time.time() - best_mtime) <= SESSION_TRANSCRIPT_MAX_AGE:
+                return best
+            return None
+    except Exception:
+        return None
+    return None
+
+
 def _session(args) -> str | None:
-    return getattr(args, "session", None) or os.environ.get("CLAUDE_SESSION_ID") or None
+    return (
+        getattr(args, "session", None)
+        or os.environ.get("CLAUDE_SESSION_ID")
+        or _session_from_transcripts()
+        or None
+    )
 
 
 def _proc_start(pid: int) -> str | None:
@@ -351,6 +498,41 @@ def _proc_start(pid: int) -> str | None:
         ).strftime("%Y-%m-%dT%H:%M:%SZ")
     except Exception:
         return None
+
+
+# Per-event wrappers Claude Code (or the Bash tool) puts between the window
+# process and this script. Recording one of these as the window's pid
+# self-destructs the board: the wrapper exits the moment the call returns, and
+# the next tick's pid-liveness GC drops the window even though the Claude
+# window itself is alive.
+_TRANSIENT_PARENTS = {
+    "cmd.exe", "conhost.exe", "powershell.exe", "pwsh.exe",
+    "bash.exe", "sh.exe", "bash", "sh", "zsh", "dash",
+    "python.exe", "python3.exe", "python", "python3", "py.exe",
+}
+
+
+def _window_pid() -> int:
+    """Nearest long-lived ancestor to represent this Claude window.
+
+    Walks up from getppid() past known per-event wrappers to the first stable
+    ancestor (normally the claude/node process). Falls back to plain
+    getppid() when psutil or the walk is unavailable.
+    """
+    ppid = os.getppid()
+    try:
+        import psutil  # type: ignore
+        p = psutil.Process(ppid)
+        for _ in range(8):
+            if p.name().lower() not in _TRANSIENT_PARENTS:
+                return p.pid
+            parent = p.parent()
+            if parent is None:
+                break
+            p = parent
+        return p.pid
+    except Exception:
+        return ppid
 
 
 def _norm_claims(state: dict, sid: str, paths: list[str]) -> list[str]:
@@ -406,9 +588,10 @@ def hook_tick(session: str | None, cwd: str | None = None,
         state["repo"] = main_root
         win = state["windows"].get(sid)
         if win is None:
+            pid = _window_pid()
             win = {
-                "session": sid, "pid": os.getppid(), "host": socket.gethostname(),
-                "start": _proc_start(os.getppid()), "branch": branch,
+                "session": sid, "pid": pid, "host": socket.gethostname(),
+                "start": _proc_start(pid), "branch": branch,
                 "worktree": cwd or str(Path.cwd().resolve()),
                 "first_seen": now_iso(), "hb": now_iso(),
                 "note": note or "", "claims": [],
@@ -419,6 +602,14 @@ def hook_tick(session: str | None, cwd: str | None = None,
             win["branch"] = branch or win.get("branch")
             if note is not None:
                 win["note"] = note
+            # A recorded pid that died while the window lives (transient
+            # wrapper, harness restart) is re-stamped from the live tree, so
+            # the PID_DEAD_GRACE window never has to carry it for long.
+            if _pid_alive(win.get("pid"), win.get("host", ""), win.get("start")) is False:
+                pid = _window_pid()
+                win["pid"] = pid
+                win["start"] = _proc_start(pid)
+                win["host"] = socket.gethostname()
         state["windows"][sid] = win
         _gc(state, stale)
         _save_state(d, state)
@@ -453,6 +644,34 @@ def _with_lock(d: Path, fn, timeout: float = LOCK_TIMEOUT):
         _release_lock(lock)
 
 
+def _register_into(state: dict, args, sid: str, branch: str | None) -> None:
+    """Insert/refresh THIS window in an ALREADY-LOADED state dict.
+
+    Deliberately lock-free: every caller runs inside _with_lock. cmd_beat used
+    to call cmd_register() from inside its own lock, which re-entered
+    _with_lock on the same directory -- the inner acquire could never win, so
+    beat burned the whole LOCK_TIMEOUT and failed with "could not acquire
+    lock" for any window not yet on the board (its first beat could never
+    register it).
+    """
+    win = state["windows"].get(sid, {})
+    pid = int(args.pid) if getattr(args, "pid", None) else _window_pid()
+    win.update({
+        "session": sid,
+        "pid": pid,
+        "host": socket.gethostname(),
+        "start": win.get("start") or _proc_start(pid),
+        "branch": getattr(args, "branch", None) or branch,
+        "worktree": getattr(args, "worktree", None) or str(Path.cwd().resolve()),
+        "first_seen": win.get("first_seen") or now_iso(),
+        "hb": now_iso(),
+        "note": args.note if getattr(args, "note", None) is not None else win.get("note", ""),
+        "claims": win.get("claims", []),
+    })
+    state["windows"][sid] = win
+    _add_event(state, f"[{sid}] registered on {win['branch']}")
+
+
 def cmd_register(args) -> int:
     sid = _session(args)
     if not sid:
@@ -464,23 +683,8 @@ def cmd_register(args) -> int:
 
     def op():
         state = _load_state(d)
-        win = state["windows"].get(sid, {})
-        pid = int(args.pid) if args.pid else os.getppid()
-        win.update({
-            "session": sid,
-            "pid": pid,
-            "host": socket.gethostname(),
-            "start": win.get("start") or _proc_start(pid),
-            "branch": args.branch or branch,
-            "worktree": args.worktree or str(Path.cwd().resolve()),
-            "first_seen": win.get("first_seen") or now_iso(),
-            "hb": now_iso(),
-            "note": args.note if args.note is not None else win.get("note", ""),
-            "claims": win.get("claims", []),
-        })
-        state["windows"][sid] = win
+        _register_into(state, args, sid, branch)
         _gc(state, args.stale)
-        _add_event(state, f"[{sid}] registered on {win['branch']}")
         _save_state(d, state)
         _write_work_md(d, state, args.stale)
         return 0
@@ -494,18 +698,24 @@ def cmd_beat(args) -> int:
         sys.stderr.write("coord beat: no session\n")
         return 2
     sid = sid[:6]
-    d = journal_dir()
+    # One repo_identity() call gives both the board key and the branch, so the
+    # first-beat register path below needs no extra git spawn.
+    key, _, branch = repo_identity()
+    d = COORD_ROOT / key
 
     def op():
         state = _load_state(d)
         win = state["windows"].get(sid)
         if win is None:
-            return cmd_register(args)  # auto-register on first beat
-        win["hb"] = now_iso()
-        if args.note is not None:
-            if args.note != win.get("note"):
-                _add_event(state, f"[{sid}] {args.note}")
-            win["note"] = args.note
+            # First beat = join. Inline, NOT via cmd_register(), which would
+            # re-enter _with_lock on this same dir and deadlock against us.
+            _register_into(state, args, sid, branch)
+        else:
+            win["hb"] = now_iso()
+            if args.note is not None:
+                if args.note != win.get("note"):
+                    _add_event(state, f"[{sid}] {args.note}")
+                win["note"] = args.note
         _gc(state, args.stale)
         _save_state(d, state)
         _write_work_md(d, state, args.stale)
@@ -525,9 +735,11 @@ def cmd_claim(args) -> int:
     def op():
         state = _load_state(d)
         _gc(state, args.stale)
+        pid = _window_pid()
         win = state["windows"].setdefault(sid, {
-            "session": sid, "pid": os.getppid(), "host": socket.gethostname(),
-            "start": None, "branch": None, "worktree": str(Path.cwd().resolve()),
+            "session": sid, "pid": pid, "host": socket.gethostname(),
+            "start": _proc_start(pid), "branch": None,
+            "worktree": str(Path.cwd().resolve()),
             "first_seen": now_iso(), "hb": now_iso(), "note": "", "claims": [],
         })
         win["hb"] = now_iso()

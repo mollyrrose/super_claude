@@ -218,10 +218,14 @@ def main() -> int:
                           "transcript_path": tpath, "model": "claude-opus-4-8"})
     # Hermetic: the gate's master kill switch (CC_BUDGET_GATE_DISABLE=1) may be
     # deliberately set in the ambient env; B1 tests dispatch plumbing, so it
-    # force-enables the gate for this subprocess only.
+    # force-enables the gate for this subprocess only. COORD_DISABLE keeps the
+    # fake "smoke-dispatch" session off the REAL coordination board (coord has
+    # its own isolated smoketest; without this, every test run registered a
+    # ghost window that polluted live windows' [coordination] context).
     rc, out, err = _run_subprocess("UserPromptSubmit", payload,
                                    {"QREV_AUTO_LEVEL": "0",
-                                    "CC_BUDGET_GATE_DISABLE": "0"})
+                                    "CC_BUDGET_GATE_DISABLE": "0",
+                                    "COORD_DISABLE": "1"})
     if rc != 0:
         failures.append(f"B1 exit {rc} (stderr: {err[:160]})")
     elif out:

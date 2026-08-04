@@ -191,3 +191,6 @@ ruvector.db
 
 # hermes-agent state files
 /hermes-agent/claude_code_integration/__pycache__/
+
+# ruflo/claude-flow plugin state droppings (regenerated, never tracked)
+.claude-flow/

@@ -157,7 +157,14 @@ function _writeBaselines(data) {
 const _CLEAR_DROP_THRESHOLD = 15;       // %-drop that signals a /clear event → re-baseline
 const _BASELINE_TTL_DAYS = 30;
 
-function rebaselineUsed(sessionId, rawUsed) {
+// `rawRemaining` is Claude Code's OWN context_window.remaining_percentage, passed
+// straight through and stored per session. It is the only authoritative context
+// number available anywhere in this setup, and context_budget_gate.py reads it
+// back from this file instead of re-deriving a guess from transcript tokens +
+// a model-id lookup table. That guess disagreed with this bar (gate: "context
+// nearly full", statusline: 15% used) whenever the active model was missing
+// from the gate's 1M-family list. One source of truth, no contradiction.
+function rebaselineUsed(sessionId, rawUsed, rawRemaining) {
   if (!sessionId || typeof rawUsed !== 'number') return rawUsed;
   const safe = String(sessionId).replace(/[^A-Za-z0-9_-]/g, '');
   if (!safe) return rawUsed;
@@ -165,20 +172,22 @@ function rebaselineUsed(sessionId, rawUsed) {
   const data = _readBaselines();
   const entry = data[safe];
   const nowIso = new Date().toISOString();
+  const remaining = typeof rawRemaining === 'number' ? rawRemaining : undefined;
 
   let baseline;
   if (!entry) {
-    data[safe] = { baseline: rawUsed, maxSeen: rawUsed, ts: nowIso };
+    data[safe] = { baseline: rawUsed, maxSeen: rawUsed, ts: nowIso, remaining };
     baseline = rawUsed;
   } else if (rawUsed < entry.maxSeen - _CLEAR_DROP_THRESHOLD) {
     // Big drop → likely a /clear, re-baseline to the new low.
-    data[safe] = { baseline: rawUsed, maxSeen: rawUsed, ts: nowIso };
+    data[safe] = { baseline: rawUsed, maxSeen: rawUsed, ts: nowIso, remaining };
     baseline = rawUsed;
   } else {
     data[safe] = {
       baseline: entry.baseline,
       maxSeen: Math.max(entry.maxSeen, rawUsed),
       ts: nowIso,
+      remaining,
     };
     baseline = entry.baseline;
   }
@@ -204,7 +213,7 @@ function buildContextBar(remainingPct, sessionId) {
     ((remainingPct - AUTO_COMPACT_BUFFER_PCT) / (100 - AUTO_COMPACT_BUFFER_PCT)) * 100
   );
   const rawUsed = Math.max(0, Math.min(100, Math.round(100 - usable)));
-  const used = rebaselineUsed(sessionId, rawUsed);
+  const used = rebaselineUsed(sessionId, rawUsed, remainingPct);
   return ` ${DIM}2Compact${RESET} ${DIM}S${RESET}` + buildBar(used, ctxThresholdColor(used), 'full');
 }
 
@@ -269,8 +278,9 @@ function readBridge(sessionId) {
 // job) writes its progress into ~/.claude/.process_progress/<session>.json via
 // scripts/process_progress.js. The statusline renders one thin bar per active
 // entry on a line BELOW the quota bars. Per-session file keeps each window's
-// processes separate; a shared _fallback.json is read when no per-session file
-// exists (single-window convenience). Entries are {id,label,pct,started_at,
+// processes separate; the shared _fallback.json (writer could not identify its
+// window) is claimed only by a SOLE live window, and its entries are filtered
+// by the owner the writer stamped. Entries are {id,label,pct,started_at,
 // eta_seconds,updated_at,done}. pct (task-based) wins; else pct is derived from
 // started_at + eta_seconds (time-based). done/stale entries are dropped.
 function _processDir() {
@@ -282,6 +292,26 @@ function _safeSession(sessionId) {
   return String(sessionId || '').replace(/[^A-Za-z0-9_-]/g, '');
 }
 
+// How recently another window must have rendered its statusline to count as
+// live. Every render stamps `ts` for its own session in the baselines file, so
+// counting fresh entries is a free multi-window probe (no extra file reads).
+const _LIVE_WINDOW_MS = 10 * 60 * 1000;
+
+function _liveWindowCount() {
+  try {
+    const data = _readBaselines();
+    const cutoff = Date.now() - _LIVE_WINDOW_MS;
+    let n = 0;
+    for (const k of Object.keys(data)) {
+      const t = Date.parse((data[k] && data[k].ts) || 0);
+      if (t && t >= cutoff) n++;
+    }
+    return n;
+  } catch {
+    return 0;
+  }
+}
+
 function readProcessProgress(sessionId) {
   try {
     const dir = _processDir();
@@ -289,9 +319,16 @@ function readProcessProgress(sessionId) {
     const safe = _safeSession(sessionId);
     // nosemgrep: path-join-resolve-traversal -- `safe` is sanitized by _safeSession() to [A-Za-z0-9_-]; no traversal possible
     let file = safe ? path.join(dir, `${safe}.json`) : '';
+    let isFallback = false;
     if (!file || !fs.existsSync(file)) {
+      // The shared file holds entries whose writer could not identify its
+      // window. Rendering it unconditionally is what made one window's job
+      // draw bars in EVERY window; only claim it when this is the sole live
+      // window, so with several windows open an unattributable job shows
+      // nowhere rather than everywhere.
+      if (_liveWindowCount() > 1) return [];
       const fb = path.join(dir, '_fallback.json');
-      if (fs.existsSync(fb)) file = fb; else return [];
+      if (fs.existsSync(fb)) { file = fb; isFallback = true; } else return [];
     }
     const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
     const list = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.processes) ? raw.processes : []);
@@ -299,6 +336,9 @@ function readProcessProgress(sessionId) {
     const out = [];
     for (const e of list) {
       if (!e || e.done === true) continue;
+      // A fallback entry stamped with a different window's session belongs to
+      // that window (process_progress.js records the owner it resolved).
+      if (isFallback && e.session && safe && e.session !== safe) continue;
       const stamp = Date.parse(e.updated_at || e.started_at || '') || 0;
       if (stamp && now - stamp > PROCESS_PROGRESS_TTL_MS) continue;
       let pct = (typeof e.pct === 'number') ? e.pct : null;
