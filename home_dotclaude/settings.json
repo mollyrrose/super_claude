@@ -3,7 +3,7 @@
     "OPENAI_API_KEY": "[REDACTED:OPENAI_API_KEY]",
     "DEEPSEEK_API_KEY": "[REDACTED:DEEPSEEK_API_KEY]",
     "QREV_CRITIC_PROVIDERS": "claude,openai,deepseek",
-    "ECC_DISABLED_HOOKS": "stop:format-typecheck"
+    "ECC_DISABLED_HOOKS": "stop:format-typecheck,pre:edit-write:suggest-compact,pre:observe,pre:observe:continuous-learning,stop:check-console-log,stop:session-end,stop:evaluate-session,stop:cost-tracker,stop:desktop-notify"
   },
   "permissions": {
     "allow": [

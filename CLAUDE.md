@@ -127,6 +127,32 @@ arrays in `settings.json` to the per-hook command list (a backup is at
 `CC_HOOK_DISPATCH_DISABLE=1` to make the dispatcher a pass-through no-op without
 editing settings.
 
+### ECC plugin hooks disabled on this setup (ECC_DISABLED_HOOKS)
+
+The ECC plugin registers its own hooks on top of ours; several are disabled via
+the `ECC_DISABLED_HOOKS` env in `settings.json` (comma-separated hook ids,
+checked inside the plugin's `run-with-flags.js`) because on this Windows setup
+they produced errors or pure waste (observed 2026-08-06 in the hc windows):
+
+- `pre:observe` / `pre:observe:continuous-learning` -- spawned node + bash.exe on
+  EVERY tool call; 779 `spawnSync bash.exe ETIMEDOUT` failures in one session.
+- `stop:check-console-log` and the async `stop:session-end` /
+  `stop:evaluate-session` / `stop:cost-tracker` -- each Stop re-parsed the
+  multi-MB session transcript; under load the inner 30s spawnSync limit tripped,
+  surfacing as "Stop hook error ... spawnSync node.exe ETIMEDOUT". Their data
+  fed ECC's own learning/metrics, which this setup duplicates with
+  hermes-curate / rev-learn / the statusline bridge.
+- `stop:desktop-notify` -- macOS/WSL only, no-op cost on native Windows.
+- `stop:format-typecheck`, `pre:edit-write:suggest-compact` -- disabled earlier
+  (batch typecheck unwanted; interval-based /compact nagging).
+
+Note the limit honestly: disabling via env still spawns the plugin's outer
+`node -e` wrapper per hook per event (the flag is checked one process deep), so
+this removes the ERRORS and the heavy inner work, not the spawn overhead itself.
+Kill switch: remove an id from `ECC_DISABLED_HOOKS` to re-enable it (running
+windows only pick env changes up on restart). Removing the spawns entirely would
+require disabling the `ecc` plugin, which would also remove its skills/agents.
+
 Changes to these scripts should:
 1. Always preserve the `silent no-op on missing / malformed stdin` pattern (see `semgrep_postedit_hook.py:42-50`). A hook that crashes on a bad payload would block every Write/Edit. The dispatcher follows the same rule: any hook that raises / fails to import is isolated as a no-op, and the dispatcher itself exits 0 (UserPromptSubmit) on any internal error.
 2. Exit 0 by default; reserve non-zero for genuinely blocking conditions.
