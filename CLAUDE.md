@@ -162,6 +162,32 @@ Kill switches: restore the `.bak.pre-trim` backup to undo the trim; remove an id
 from `ECC_DISABLED_HOOKS` to re-enable a hook (running windows only pick env
 changes up on restart).
 
+### Ruflo plugin hook shim patched (cmd.exe arg quoting)
+
+The ruflo plugin's hook shim
+(`~/.claude/plugins/cache/ruflo/ruflo-core/0.2.6/scripts/ruflo-hook.cjs`) spawns
+the ruflo/claude-flow CLI with `shell:true` on Windows and passed the raw Bash
+command as an UNQUOTED `-c` argument. cmd.exe re-tokenizes that string, so any
+command text containing `>NNN` (e.g. `awk 'NR>=185 ...'` -- single quotes are
+not quotes in cmd, and `=` is a cmd token delimiter) became a real redirect:
+a stray file named `185` appeared in the PROJECT ROOT, filled with the hook's
+stdin JSON payload. Observed 2026-08-06 in d:/projects/qai as stray files
+`185/45/88/92/95`, each matching the first `NR>=NNN` of an awk command run by a
+session agent; reproduced 1:1, then fixed.
+
+Fix (applied 2026-08-06): `invokeHook()` in the shim now cmd-quotes every arg
+when the `shell:true` path is taken (wrap in `"..."`, double embedded quotes,
+fold raw newlines to spaces). Verified: the repro no longer creates the stray
+file, and the CLI records the full command text verbatim (previously it was
+silently truncated at the first metacharacter). Backup:
+`ruflo-hook.cjs.bak.pre-cmdquote` next to the file. ROT WARNING: a ruflo plugin
+update re-materializes the cache and reverts the patch -- if number-named stray
+files with hook-JSON content ever reappear in a repo root, this patch has been
+rolled back by an update; re-apply it. Kill switch: restore the `.bak` backup;
+`RUFLO_HOOK_SKIP_NPX=1` additionally makes all ruflo hooks a no-op while no
+`ruflo`/`claude-flow` binary is installed (everything currently runs via the
+`npx ruflo@latest` fallback).
+
 Changes to these scripts should:
 1. Always preserve the `silent no-op on missing / malformed stdin` pattern (see `semgrep_postedit_hook.py:42-50`). A hook that crashes on a bad payload would block every Write/Edit. The dispatcher follows the same rule: any hook that raises / fails to import is isolated as a no-op, and the dispatcher itself exits 0 (UserPromptSubmit) on any internal error.
 2. Exit 0 by default; reserve non-zero for genuinely blocking conditions.
