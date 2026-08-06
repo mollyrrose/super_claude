@@ -26,6 +26,9 @@ Tunables (env):
                       window). Keeps the budget correct when running on z.ai.
  - CC_BUDGET_SOFT_PCT remaining-% at or below which soft warning fires (default 25).
  - CC_BUDGET_HARD_PCT remaining-% at or below which the wording escalates (default 10).
+ - CC_BUDGET_QCLOSE_REDO_DELTA / CC_BUDGET_SOFT_REDO_DELTA  per-session dedupe:
+   the near-full and soft tiers fire once, then re-fire only after this many
+   more percent of the window is consumed (default 10 each).
 """
 
 from __future__ import annotations
@@ -88,8 +91,11 @@ _ONE_MILLION_MARKERS = ("[1m]", "-1m", "_1m", "1m-context", "1m_context")
 # ADD IT HERE, or the gate silently falls back to 200K and starts telling the
 # model "context nearly full" at ~18% real usage of the 1M window (this exact
 # bug shipped once: the list said only "opus-4" while the setup ran Opus 5 /
-# Fable 5 [1m], fixed 2026-08-03).
-_ONE_MILLION_FAMILIES = ("opus-4", "opus-5", "fable")
+# Fable 5 [1m], fixed 2026-08-03; shipped AGAIN with claude-sonnet-5 missing
+# while sonnet-5 sessions ran the 1M window -- observed at 315K and 893K live
+# tokens on 2026-08-05 -- fixed same day). The `used > token_limit`
+# self-correction in main() is the structural backstop for the next rot.
+_ONE_MILLION_FAMILIES = ("opus-4", "opus-5", "sonnet-5", "fable")
 
 # GLM (z.ai) model-id substrings. When the active provider is z.ai the served
 # model id is "glm-..." (e.g. glm-4.6, GLM-5.2), NOT an Anthropic id, so this
@@ -357,26 +363,35 @@ def _load_flush_state() -> dict:
         return {}
 
 
-def _qupd_flush_due(session_id: str, used_pct: int) -> bool:
-    """True if this session has never flushed, or has consumed at least
-    QUPD_REDO_DELTA more percent of the window since its last flush."""
+def _tier_due(session_id: str, used_pct: int, key: str, redo_delta: int) -> bool:
+    """True if this session has never fired the given tier, or has consumed at
+    least redo_delta more percent of the window since that tier last fired.
+    Shared dedupe for ALL tiers -- without it the near-full/soft tiers re-fired
+    on EVERY prompt of a full session (observed 11x NEAR-FULL in one window),
+    which is exactly the context-nagging the user rejected."""
     state = _load_flush_state()
     entry = state.get(session_id)
     if not isinstance(entry, dict):
         return True
-    last = entry.get("used_pct")
+    last = entry.get(key)
     if not isinstance(last, (int, float)):
         return True
-    return (used_pct - last) >= QUPD_REDO_DELTA
+    return (used_pct - last) >= redo_delta
 
 
-def _record_flush(session_id: str, used_pct: int) -> None:
-    """Mark this session flushed at used_pct. Fail-soft; bounds file size."""
+def _record_tier(session_id: str, used_pct: int, key: str) -> None:
+    """Mark the given tier fired at used_pct. Merges into the session entry so
+    tiers don't clobber each other's dedupe keys. Fail-soft; bounds file size."""
     if not session_id:
         return
     try:
         data = _load_flush_state()
-        data[session_id] = {"used_pct": used_pct}
+        entry = data.get(session_id)
+        if not isinstance(entry, dict):
+            entry = {}
+        entry[key] = used_pct
+        data.pop(session_id, None)  # re-insert to refresh recency order
+        data[session_id] = entry
         if len(data) > 200:  # keep the most-recently-inserted ~200 sessions
             for k in list(data.keys())[:-200]:
                 data.pop(k, None)
@@ -384,6 +399,18 @@ def _record_flush(session_id: str, used_pct: int) -> None:
             json.dump(data, fh)
     except Exception:
         pass
+
+
+# Legacy key: the qUpd flush tier recorded {"used_pct": X} before per-tier keys
+# existed; keeping the same key preserves old state files' dedupe.
+_qupd_flush_due = lambda session_id, used_pct: _tier_due(  # noqa: E731
+    session_id, used_pct, "used_pct", QUPD_REDO_DELTA
+)
+_record_flush = lambda session_id, used_pct: _record_tier(  # noqa: E731
+    session_id, used_pct, "used_pct"
+)
+QCLOSE_REDO_DELTA = int(os.environ.get("CC_BUDGET_QCLOSE_REDO_DELTA", "10"))
+SOFT_REDO_DELTA = int(os.environ.get("CC_BUDGET_SOFT_REDO_DELTA", "10"))
 
 
 def _build_qupd_flush_context(remain_pct: int) -> str:
@@ -419,23 +446,25 @@ def _build_qupd_flush_context(remain_pct: int) -> str:
 def _build_qclose_context(remain_pct: int) -> str:
     """Strongest tier: context is nearly full and auto-compact is imminent.
 
-    Instructs Claude to STOP, recommend a manual /qClose (precise handoff),
-    and end the turn with the exact USER-INPUT banner so the idle terminal is
-    noticed. Fires just before the auto-compact point so the user can pick the
-    precise handoff over the lossy summary.
+    NON-BLOCKING by design (changed 2026-08-05): the old wording ordered Claude
+    to STOP all work and end the turn with the USER-INPUT banner. In a window
+    running a continuation condition (loop/until mode) that produced a live
+    deadlock: the gate said "stop", the Stop-condition hook said "not done,
+    keep going", and the harness gave up with "A hook blocked the turn from
+    ending 9 consecutive times" errors. A near-full notice must never order a
+    stop -- it informs once and lets the work continue (auto-compact is the
+    accepted fallback; edited files persist on disk regardless).
     """
     return (
         "<<context-budget-gate>>\n"
-        f"[context-budget NEAR-FULL] remaining ~{remain_pct}% -- auto-compact is imminent.\n\n"
-        "IMPORTANT: Do NOT start the user's prompt above or any new work. The context window "
-        "is almost full; auto-compact will soon replace this session with a LOSSY summary. "
-        "Instead, in the user's language, briefly tell them the context is nearly full and "
-        "recommend running /qClose now to capture a precise, resumable handoff before that "
-        "happens (auto-compact remains the fallback if they do nothing). Do not mention this "
-        "gate by name. End your reply with EXACTLY these three lines and nothing after them:\n"
-        "*********************************\n"
-        "*    USER INPUT REQUIRED        *\n"
-        "*********************************\n"
+        f"[context-budget NEAR-FULL] remaining ~{remain_pct}% -- auto-compact will "
+        "summarise this session soon.\n\n"
+        "Before starting the user's prompt above, tell the user in ONE short line "
+        "(their language) that the context window is nearly full and /qClose is "
+        "available now for a precise, resumable handoff if they prefer it over the "
+        "automatic summary. Then CONTINUE with the user's actual prompt normally. "
+        "Do not stop, do not wait for an answer, do not emit the USER INPUT REQUIRED "
+        "banner for this notice alone, and do not mention this gate by name.\n"
         "<</context-budget-gate>>"
     )
 
@@ -485,21 +514,36 @@ def main() -> int:
         used = int(token_limit * used_pct / 100)
         have_signal = True
     else:
+        # Self-correction backstop for family-list rot: live context tokens can
+        # never legitimately exceed the real window (auto-compact fires well
+        # before 100%), so observed usage above the guessed window PROVES the
+        # guess was too small -- the session is on the 1M window and the model
+        # id just isn't in _ONE_MILLION_FAMILIES yet. Without this, an
+        # unrecognised 1M model gets budgeted 200K and the gate screams
+        # NEAR-FULL at ~20-30% real usage (the exact sonnet-5 failure of
+        # 2026-08-05). Skipped when CC_CONTEXT_LIMIT explicitly forces a window.
+        if not TOKEN_LIMIT_OVERRIDE_RAW and used > token_limit:
+            token_limit = 1_000_000
         used_pct = min(100, max(0, round(100 * used / token_limit)))
         remain_pct = 100 - used_pct
         have_signal = used > 0
 
-    # Strongest tier first: near-full -> recommend a manual /qClose handoff
+    # Strongest tier first: near-full -> one-line /qClose availability notice
     # before the (lossy) auto-compact kicks in. Takes precedence over the
-    # soft/projected warning below.
+    # soft/projected warning below. Deduped per session (re-fires only after
+    # QCLOSE_REDO_DELTA more % consumed) so a full session is told ONCE, not on
+    # every prompt; requires a session_id to dedupe, so skip without one rather
+    # than risk a nag loop (same policy as the qUpd flush tier).
     if have_signal and remain_pct <= QCLOSE_REMAIN_PCT:
-        decision = {
-            "hookSpecificOutput": {
-                "hookEventName": "UserPromptSubmit",
-                "additionalContext": _build_qclose_context(remain_pct),
+        if session_id and _tier_due(session_id, used_pct, "qclose_used_pct", QCLOSE_REDO_DELTA):
+            _record_tier(session_id, used_pct, "qclose_used_pct")
+            decision = {
+                "hookSpecificOutput": {
+                    "hookEventName": "UserPromptSubmit",
+                    "additionalContext": _build_qclose_context(remain_pct),
+                }
             }
-        }
-        print(json.dumps(decision))
+            print(json.dumps(decision))
         return 0
 
     # Next tier: pre-compaction qUpd flush. Fires earlier than qClose (more
@@ -536,6 +580,12 @@ def main() -> int:
     )
     if not needs_gate:
         return 0
+
+    # Same dedupe policy as the near-full tier: warn once per session (re-fire
+    # after SOFT_REDO_DELTA more % consumed), never on every prompt.
+    if not session_id or not _tier_due(session_id, used_pct, "soft_used_pct", SOFT_REDO_DELTA):
+        return 0
+    _record_tier(session_id, used_pct, "soft_used_pct")
 
     additional = _build_additional_context(remain_pct, est_task_pct, est_after_pct)
     decision = {

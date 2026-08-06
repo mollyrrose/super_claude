@@ -241,6 +241,15 @@ def main() -> int:
     except Exception:
         return 0
 
+    # Stop-hook re-entry guard (harness contract): when stop_hook_active is
+    # true, a Stop hook already blocked this turn once and Claude Code is
+    # re-running the Stop hooks on the continuation. Blocking again here can
+    # chain with OTHER blocking Stop hooks (e.g. a loop/until continuation
+    # condition) into the harness's "hook blocked the turn from ending N
+    # consecutive times" override. One nudge is all this backstop is for.
+    if payload.get("stop_hook_active"):
+        return 0
+
     transcript_path_str = payload.get("transcript_path")
     session_id = payload.get("session_id") or ""
     if not transcript_path_str:
