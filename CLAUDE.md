@@ -146,12 +146,21 @@ they produced errors or pure waste (observed 2026-08-06 in the hc windows):
 - `stop:format-typecheck`, `pre:edit-write:suggest-compact` -- disabled earlier
   (batch typecheck unwanted; interval-based /compact nagging).
 
-Note the limit honestly: disabling via env still spawns the plugin's outer
-`node -e` wrapper per hook per event (the flag is checked one process deep), so
-this removes the ERRORS and the heavy inner work, not the spawn overhead itself.
-Kill switch: remove an id from `ECC_DISABLED_HOOKS` to re-enable it (running
-windows only pick env changes up on restart). Removing the spawns entirely would
-require disabling the `ecc` plugin, which would also remove its skills/agents.
+Two layers (both applied 2026-08-06):
+1. `ECC_DISABLED_HOOKS` env (above) -- the plugin's `run-with-flags.js` skips the
+   hook's work one process deep. Removes the errors/heavy work, but the outer
+   `node -e` wrapper still spawns per hook per event.
+2. Cache trim -- the same 8 hook entries are REMOVED from the installed plugin's
+   `~/.claude/plugins/cache/ecc/ecc/<version>/hooks/hooks.json` (backup:
+   `hooks.json.bak.pre-trim` next to it), which removes the wrapper spawns too.
+   The Stop event dropped from 9 registered hooks to 3 (2 ours + 1 ruflo).
+   ROT WARNING: an ecc plugin UPDATE re-materialises the cache and restores the
+   hooks -- re-apply the trim after updates (the env layer keeps their inner
+   work off in the meantime, so nothing breaks loudly).
+
+Kill switches: restore the `.bak.pre-trim` backup to undo the trim; remove an id
+from `ECC_DISABLED_HOOKS` to re-enable a hook (running windows only pick env
+changes up on restart).
 
 Changes to these scripts should:
 1. Always preserve the `silent no-op on missing / malformed stdin` pattern (see `semgrep_postedit_hook.py:42-50`). A hook that crashes on a bad payload would block every Write/Edit. The dispatcher follows the same rule: any hook that raises / fails to import is isolated as a no-op, and the dispatcher itself exits 0 (UserPromptSubmit) on any internal error.
