@@ -25,7 +25,12 @@ const path = require('path');
 
 const MAX_STDIN = 1024 * 1024;
 const BAR_WIDTH = 5;
-const AUTO_COMPACT_BUFFER_PCT = 16.5;
+// Auto-compact headroom is a fixed TOKEN allowance, not a fixed percentage:
+// 16.5% was calibrated on a 200K window (= 33K tokens). On a 1M window the same
+// 16.5% is 165K free tokens, which pegged the 2Compact bar at 100% hours before
+// any real compaction (observed 2026-08-06, hc window at 894K/1M). The percent
+// buffer is therefore derived per-model from the token allowance.
+const AUTO_COMPACT_BUFFER_TOKENS = 33_000;
 // Orphan guard: drop process-progress entries not updated within this window.
 const PROCESS_PROGRESS_TTL_MS = 6 * 3600 * 1000;
 
@@ -206,11 +211,12 @@ function rebaselineUsed(sessionId, rawUsed, rawRemaining) {
   return Math.max(0, Math.min(100, Math.round(((rawUsed - baseline) / available) * 100)));
 }
 
-function buildContextBar(remainingPct, sessionId) {
+function buildContextBar(remainingPct, sessionId, model) {
   if (remainingPct === null || remainingPct === undefined) return '';
+  const bufferPct = (AUTO_COMPACT_BUFFER_TOKENS / detectContextLimit(model)) * 100;
   const usable = Math.max(
     0,
-    ((remainingPct - AUTO_COMPACT_BUFFER_PCT) / (100 - AUTO_COMPACT_BUFFER_PCT)) * 100
+    ((remainingPct - bufferPct) / (100 - bufferPct)) * 100
   );
   const rawUsed = Math.max(0, Math.min(100, Math.round(100 - usable)));
   const used = rebaselineUsed(sessionId, rawUsed, remainingPct);
@@ -418,7 +424,7 @@ function main() {
     }
 
     // Bars
-    const ctxBar = buildContextBar(remaining, sessionId);
+    const ctxBar = buildContextBar(remaining, sessionId, data.model);
     const fhBar = buildQuotaBar(rl.five_hour, BLUE, 5 * 3600, '5h');
     const sdBar = buildQuotaBar(rl.seven_day, ORANGE, 7 * 86400, '1w');
 
