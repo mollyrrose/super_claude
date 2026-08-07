@@ -271,6 +271,35 @@ before sending." The summary uses the same rules as the dual-layer
 question form (plain words, short sentences, one idea per sentence,
 match the user's language, simpler logic NOT slang).
 
+### /goal Stop-condition vs. waiting-for-user turns (deadlock)
+
+The built-in `/goal <text>` CLI command arms a SESSION-SCOPED Stop hook that
+blocks every turn-end until an LLM judge says the goal condition holds. It
+cannot tell "idle stop" from "legitimately waiting for the user", and its
+injected directive explicitly says not to pause for questions — so it
+structurally conflicts with any turn that MUST end awaiting input: the USER
+INPUT REQUIRED banner turns, and above all `/qClose`'s ask-before-push gate
+(constitutional). Observed failure (pa/privateassociation, 2026-08-05..06):
+/goal armed, then /qClose holding for the push decision -> the goal hook
+blocked the turn-end 9x per turn until the harness override ("A hook blocked
+the turn from ending 9 consecutive times"), on EVERY subsequent turn, for a
+day and a half — 303 wasted goal evaluations producing "Unchanged." filler.
+
+Rules while a session-scoped /goal is active:
+- Prefer continuing goal work over ending a turn waiting on input; hold only
+  at a genuine constitutional gate (push/deploy/destructive) or a real block.
+- When such a hold IS required, the closing message MUST tell the user to type
+  `/goal clear` first — only the user can clear it (`/goal` is a CLI built-in,
+  unreachable from the model). They can re-arm with `/goal <text>` afterwards.
+- During goal-block continuations of a deliberately-holding turn, reply one
+  short line ("holding — waiting on your decision; type /goal clear") and stop
+  again; do not restart work the goal demands while the session is closing.
+- Recovery signature: repeated `Stop hook error: [<goal text>]: ...` plus the
+  9-consecutive-blocks override on every turn == an armed /goal fighting a
+  waiting turn. Fix: type `/goal clear` in that window. The goal dies with its
+  session, so a restart also clears it. `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP` only
+  resizes the override cap — leave it at default.
+
 ## Pushback expected
 
 - Ask clarifying questions when a request is ambiguous or under-specified.
@@ -1148,7 +1177,7 @@ rationale* so they aren't silently re-litigated later.
   same fields as JSON on stdin to the deterministic writer:
 
   ```
-  "C:\Python313\python.exe" "D:\Projects\super_claude\hermes-agent\claude_code_integration\decision_log_cli.py"
+  "C:\Python314\python.exe" "D:\Projects\super_claude\hermes-agent\claude_code_integration\decision_log_cli.py"
   ```
 
   stdin shape: `{"title","decision","why","rejected_alternatives","revisit_if","project","outcome","session_id"}`
