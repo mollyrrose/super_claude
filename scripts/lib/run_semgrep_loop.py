@@ -289,14 +289,18 @@ def run(
             results = parsed.get("results") or []
             errors = parsed.get("errors") or []
 
-            # We accept the batch if semgrep returned results OR an errors
-            # array with structured semgrep errors (not the "no-json" sentinel).
+            # We accept the batch if semgrep returned a REAL JSON document.
+            # Real semgrep output always carries "version"/"paths", which the
+            # local sentinel dicts never do -- a clean scan with zero findings
+            # and zero errors is a success, not a retry trigger. Also accept
+            # structured semgrep errors (not the "no-json"/"timeout" sentinels).
+            is_semgrep_json = "version" in parsed or "paths" in parsed
             structured_errors = any(
                 isinstance(e, dict) and e.get("type") not in ("no-json", "timeout")
                 for e in errors
             )
 
-            if results or structured_errors:
+            if results or structured_errors or is_semgrep_json:
                 all_results.extend(results)
                 all_errors.extend(errors)
                 successful_batches += 1
