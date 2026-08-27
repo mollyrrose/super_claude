@@ -58,3 +58,11 @@ planning; the engine does not use it (out of appsec scope).
 Order phases per OWASP WSTG (web) and PTES: orient -> static (SAST/SCA/secrets/IaC)
 -> recon/enumeration -> non-destructive vuln discovery -> report -> auto-fix +
 re-verify. NIST 800-115 for assessment rigor. Map findings to CWE/OWASP Top 10.
+
+# Lint note (2026-08-27 scan)
+
+Entry is ~60 days old against this topic's ~30-day freshness window. Matrix
+itself (tool selection per phase) is not re-verified this pass; candidate
+additions to consider next time: [mcp-scanner-cisco](/devsec-tools/mcp-scanner-cisco.md)
+and [snyk-agent-scan](/devsec-tools/snyk-agent-scan.md) (MCP-security phase,
+not yet in the matrix above).

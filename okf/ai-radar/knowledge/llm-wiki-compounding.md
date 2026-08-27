@@ -42,3 +42,11 @@ this technique is the maintenance loop that keeps it alive.
 Karpathy gist (no installable package) — it is a written pattern, not a tool, so
 the GitHub-inspection rule reduces to "read the gist as the source of truth".
 Grounding source verified: the gist itself (`resource`).
+
+# Related implementation (2026-08-27 scan)
+
+[GBrain](/knowledge/gbrain.md) is a concrete, popular, production-scale
+open-source implementation of this exact thesis (compounding markdown
+knowledge graph vs. vector-only RAG) — worth cross-referencing as a
+reference implementation, though its own benchmark numbers are self-reported
+and unverified.

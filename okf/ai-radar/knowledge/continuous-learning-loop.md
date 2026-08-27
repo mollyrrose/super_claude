@@ -40,3 +40,11 @@ Karpathy gist + the talk; no installable artifact for us. Verdict: confirms the 
 are already on (compounding memory + accumulate-data-then-learn); `adoption: no new
 build`. The one forward step it points at — smart_router moving rule-based -> learned
 once enough eval data accrues — is already the documented PCN plan.
+
+# External validation (2026-08-27 scan)
+
+Anthropic's own "Dreaming" primitive for Claude Managed Agents — see
+[anthropic-dreaming-memory](/knowledge/anthropic-dreaming-memory.md) — is a
+first-party vendor product doing the same between-session memory
+consolidation this entry already argued for. Cited here as corroborating
+evidence, not as a new build target.

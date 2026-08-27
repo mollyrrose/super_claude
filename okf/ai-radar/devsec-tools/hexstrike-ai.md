@@ -50,3 +50,9 @@ Two reasons, both awareness — NOT a recommendation to wire it into everyday fl
 `adoption: do-not-auto-recommend` — `/radar-check` must NEVER surface this as a
 "there is something better, adopt it" gate flag; it is an offensive capability, not
 a dependency upgrade.
+
+# Lint note (2026-08-27 scan)
+
+Entry is ~60 days old against this topic's ~30-day freshness window. Flagged
+needing re-verification (repo activity, star/issue trajectory, any new
+incidents) at the next scan — content not re-checked this pass.

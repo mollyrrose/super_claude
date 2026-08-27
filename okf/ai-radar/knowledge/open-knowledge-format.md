@@ -1,9 +1,9 @@
 ---
 type: pattern
-title: Open Knowledge Format (OKF) v0.1
-description: Vendor-neutral spec for agent-ready knowledge — markdown + YAML frontmatter, one required field (type).
+title: Open Knowledge Format (OKF) v0.1 -> v0.2
+description: Vendor-neutral spec for agent-ready knowledge — markdown + YAML frontmatter, one required field (type). v0.2 (2026-07-25) added provenance/trust/lifecycle fields with two breaking renames.
 tags: [okf, knowledge, google, markdown, agent-memory]
-timestamp: 2026-06-28T00:00:00Z
+timestamp: 2026-08-27T00:00:00Z
 resource: https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md
 status: current
 supersedes: []
@@ -46,6 +46,27 @@ citations embedded (less hallucination), self-maintaining. See
 
 Reference impl in the Google Cloud `knowledge-catalog` repo: an enrichment agent
 (walks BigQuery, drafts OKF docs), a static HTML graph visualizer (no backend),
-and sample bundles (GA4 e-commerce, Stack Overflow, Bitcoin). Spec is v0.1 —
-expect changes; re-confirm fields at scan time. This very bundle (`okf/ai-radar/`)
-is an OKF bundle, so the format is dog-fooded locally.
+and sample bundles (GA4 e-commerce, Stack Overflow, Bitcoin). This very bundle
+(`okf/ai-radar/`) is an OKF bundle, so the format is dog-fooded locally.
+
+# Update (2026-08-27 scan): v0.2 released 2026-07-25
+
+Confirmed directly via WebFetch of the spec file: the "Version" line reads
+0.2 and a "Changes from v0.1" section lists two BREAKING renames plus new
+optional field families:
+
+- `timestamp` -> `generated.at` (breaking)
+- body citations -> frontmatter `sources` field (breaking)
+- new optional fields: provenance, trust (`generated`/`verified` blocks),
+  lifecycle (`status`, `stale_after`), attested computation
+
+`type` remains the only required field — this bundle's existing entries
+(which use `timestamp`, `resource`, `status`, `supersedes` per v0.1) remain
+valid OKF documents since v0.2 kept those as backward-compatible optional
+fields per the conformance rule (consumers must tolerate missing/renamed
+optional fields). No v0.3 found as of this scan.
+
+**Flagged, not auto-applied:** migrating this bundle's ~20 entries to the
+v0.2 field names (`generated.at`, `sources`) is a deliberate schema
+migration, not a lint-safe fix — left for a dedicated pass rather than
+applied here.
