@@ -56,6 +56,10 @@ powershell -File <repo-root>\scripts\backup_claude_state.ps1
 ## Rebuild on a new machine
 
 1. Install **Python 3.x** (any drive; on PATH, or set `$env:CLAUDE_PYTHON`) and **Node.js**.
+   Also install **semgrep** (`python -m pip install --upgrade semgrep`) — required
+   for `/qRev`'s and `/rev`'s Phase A deterministic gate; see "Required tool:
+   semgrep" below. Without it, Phase A logs a coverage gap and skips straight to
+   the agent fleet.
 2. Clone this repo **anywhere** (no specific drive needed — no fixed drive letter
    is required). Restore fills `[REPO]` from the clone's own location and `[PY]`
    from the Python it finds, so the layout is portable.
@@ -95,6 +99,36 @@ powershell -File <repo-root>\scripts\backup_claude_state.ps1
   under `C:\Users\<user>`).
 - The GLM (z.ai) launcher and other one-off install commands live in the global
   `~/.claude/CLAUDE.md`; run them manually when needed.
+
+## Required tool: semgrep (`/qRev` & `/rev` Phase A)
+
+`/qRev` and `/rev` run a deterministic gate (Phase A) before the agent fleet:
+semgrep + `CODING_STANDARDS.md` non-negotiable rules, via
+`scripts/lib/run_semgrep_loop.py`. If semgrep is missing on a machine, Phase A
+logs `Phase A: semgrep nincs telepitve -> kihagyva (coverage gap)` and the run
+falls straight to Phase B — findings that semgrep would have caught are
+silently skipped.
+
+Install (any Python on the machine; pick the same one Claude Code's hooks use):
+```powershell
+python -m pip install --upgrade semgrep
+```
+
+On Windows, `pip install --user`-style installs put `semgrep.exe` under
+`%APPDATA%\Python\Python3XX\Scripts`, which is usually **not** on `PATH`.
+`run_semgrep_loop.py` already handles this: `_extend_path_for_semgrep()` globs
+the standard per-user install roots (`%APPDATA%\Python`,
+`%LOCALAPPDATA%\Programs\Python`) for `semgrep.exe` and prepends the matching
+`Scripts` dir to its own process `PATH` before invoking semgrep — so no PATH
+edit is required for `/qRev`/`/rev` themselves to find it. To run bare
+`semgrep` from an interactive shell too (optional, for manual debugging),
+add that `Scripts` directory to your user `PATH` and open a new shell/window
+(env changes don't propagate to already-running processes, including an
+already-open Claude Code window).
+
+Per the standing "keep semgrep on the latest release" policy, upgrade with the
+same command above whenever `/qRev` or `/rev` reports semgrep is behind — no
+need to ask first.
 
 ## External skills (bundled in repo, sources below)
 

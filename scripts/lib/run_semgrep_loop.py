@@ -316,13 +316,17 @@ def run(
             # No hint and no JSON — binary-search style fallback: split
             # the batch in half and re-queue both halves.
             if len(current) > 1:
+                all_errors.extend(errors)
                 mid = len(current) // 2
                 queue.append(current[mid:])
                 current = current[:mid]
                 continue
 
-            # Single file, no hint, no JSON — give up on it.
+            # Single file, no hint, no JSON — give up on it. Preserve the raw
+            # errors (e.g. stderr_tail) from the last attempt so the caller
+            # can see WHY, instead of just "give-up-after-retries".
             skipped.append(current[0])
+            all_errors.extend(errors)
             all_errors.append({
                 "type": "give-up-after-retries",
                 "path": current[0],
