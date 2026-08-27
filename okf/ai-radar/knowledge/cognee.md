@@ -27,3 +27,13 @@ Same knowledge-graph-for-agent-memory cluster as
 [gbrain](/knowledge/gbrain.md) and [graphiti-zep](/knowledge/graphiti-zep.md)
 — complements rather than contradicts either. Landscape awareness only, no
 adoption recommendation.
+
+# Notes (2026-08-27 refresh)
+
+Mechanism, made concrete: an ECL (Extract-Cognify-Load) pipeline turns
+arbitrary data into a queryable graph combining vector embeddings, graph
+reasoning, and ontology generation, with multi-tenant support (per-user/
+per-dataset isolation). Cross-linked from the new
+[cognition](/cognition/index.md) topic: the multi-tenant, dataset-isolated
+design is built for a shared "community-brain" use case specifically, more
+so than a single personal memory layer — heavier infra than needed here.

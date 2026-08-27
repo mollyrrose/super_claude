@@ -32,6 +32,14 @@ Radar's own lint pass. Treat as external validation that the direction is
 sound, not as a build target — we are not a Claude Managed Agents customer,
 so there is nothing to install here.
 
+Cross-linked from the new [cognition](/cognition/index.md) topic
+(2026-08-27): this entry stays under `knowledge/` rather than moving, since
+`cognition/` was added after this entry existed and moving it would break
+existing links. The Dreaming consolidation heuristics (dedup duplicates,
+replace stale entries, surface cross-session patterns) are worth comparing
+directly against `memgraph-ingest`'s own merge/refresh logic — a concrete,
+not just directional, comparison point for a future pass.
+
 # Repo / source check
 
 No code repo (a hosted product feature). The primary source

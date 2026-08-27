@@ -15,6 +15,7 @@ for the format and `log.md` for the ingest timeline.
 - [harness](/harness/index.md) — Claude Code / hook / skill / MCP capabilities
 - [models](/models/index.md) — Claude / OpenAI / GLM releases, price, limits
 - [knowledge](/knowledge/index.md) — RAG, OKF, knowledge-graph, agent-memory
+- [cognition](/cognition/index.md) — brain-inspired memory/thinking architectures for agents
 - [agent-tooling](/agent-tooling/index.md) — frameworks, orchestration, prompting
 - [devsec-tools](/devsec-tools/index.md) — linters, scanners, supply-chain
 
@@ -33,3 +34,6 @@ for the format and `log.md` for the ingest timeline.
 - [knowledge/attention-residuals](/knowledge/attention-residuals.md) — model-architecture method (not-applicable)
 - [knowledge/continuous-learning-loop](/knowledge/continuous-learning-loop.md) — Sona/RuVector framing (validates direction)
 - [agent-tooling/headroom](/agent-tooling/headroom.md) — context compressor (audited clean, do-not-install)
+- [cognition/memanto](/cognition/memanto.md) — typed semantic memory, ships Claude Code integration
+- [harness/openai-codex](/harness/openai-codex.md) — competing terminal coding agent, largest weekly star gain this sweep
+- [devsec-tools/ai-infra-guard](/devsec-tools/ai-infra-guard.md) — red-team platform for agents/MCP/skills

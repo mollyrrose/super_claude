@@ -17,3 +17,4 @@ Linters, scanners, supply-chain and security tooling relevant to the harness.
 - [mcp-scanner-cisco](/devsec-tools/mcp-scanner-cisco.md) — Cisco vendor-backed MCP server/tool scanner (awareness candidate)
 - [snyk-agent-scan](/devsec-tools/snyk-agent-scan.md) — scans agents/MCP servers/skills for prompt injection & tool poisoning (awareness candidate)
 - [npm-shai-hulud-scanner](/devsec-tools/npm-shai-hulud-scanner.md) — npm supply-chain worm scanner; unverified, do-not-recommend pending review
+- [ai-infra-guard](/devsec-tools/ai-infra-guard.md) — Tencent red-team platform for agents/MCP/skills (awareness candidate)

@@ -31,3 +31,15 @@ remains self-hostable.
 Background/comparison context for the knowledge-graph-for-agent-memory
 cluster alongside [gbrain](/knowledge/gbrain.md) and
 [cognee](/knowledge/cognee.md). No direct conflict with any tracked entry.
+
+# Notes (2026-08-27 refresh)
+
+The differentiator, made concrete: each edge tracks explicit bi-temporal
+intervals (`t_valid`/`t_invalid`), i.e. when a fact was true in the world vs.
+when the system ingested it — not just a single timestamp. Retrieval fuses
+cosine similarity + BM25 + graph traversal + reranking; supported backends
+are Neo4j, FalkorDB, and Neptune. Star count refreshed to ~30.4k. Cross-
+linked from the new [cognition](/cognition/index.md) topic: the bi-temporal
+edge model is a genuine upgrade path over this project's own
+`graphifyy`-based memgraph, which does not currently track validity
+intervals per edge.

@@ -22,3 +22,7 @@ RAG, OKF, knowledge-graph, and agent-memory patterns.
 - [graphiti-zep](/knowledge/graphiti-zep.md) — temporal knowledge graph for agent memory
 - [cognee](/knowledge/cognee.md) — graph-native agent memory framework
 - [mem0-agent-memory-benchmark-2026](/knowledge/mem0-agent-memory-benchmark-2026.md) — claimed benchmark, unverified
+- [openviking](/knowledge/openviking.md) — self-evolving context DB (Volcengine); vendor-reported benchmarks
+
+See also the new [cognition](/cognition/index.md) topic for brain-inspired
+memory/thinking architectures split out from this topic on 2026-08-27.

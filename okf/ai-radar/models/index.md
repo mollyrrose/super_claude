@@ -18,3 +18,4 @@ Releases, price, limits, capability changes for Claude / OpenAI / GLM and peers.
 - [glm-5-3](/models/glm-5-3.md) — Z.ai's current GLM; post-training-only upgrade over GLM-5.2
 - [gemini-3-7-flash](/models/gemini-3-7-flash.md) — Google's current Flash-tier model
 - [gpt-5-6](/models/gpt-5-6.md) — OpenAI's current GPT-5.6 family (Luna / Sol)
+- [marin](/models/marin.md) — open end-to-end foundation-model training platform (Stanford CRFM); not applicable here, awareness only

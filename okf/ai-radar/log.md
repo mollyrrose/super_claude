@@ -9,6 +9,49 @@ timestamp: 2026-06-28T00:00:00Z
 
 Newest first. Each line: date — what changed.
 
+- 2026-08-27 (part 2) — Follow-up sweep: the routine's own prompt was updated
+  (`qRem` step 8, after part 1 below already ran) to add a **cognition**
+  topic and a GitHub-trending step; this pass covers exactly that delta
+  rather than re-sweeping the 5 topics already done today. **cognition**
+  (new topic, 8 entries): added memanto (typed semantic memory, ships Claude
+  Code integration — strongest personal-memory-layer match), hermes-agent
+  (NousResearch; naming collision flagged against this repo's own
+  hermes-agent/ dir, worth a side-by-side comparison), talker-reasoner
+  (foundational DeepMind dual-process paper), dual-process-graph-memory-
+  research-2026 (DCPM/SYNAPSE/MAGMA academic cluster, algorithmic-inspiration
+  only), letta-sleep-time-compute (MemGPT lineage, conceptual-only pending a
+  letta-code repo check), claude-mem and agentmemory (both GitHub-trending
+  Claude Code memory tools — claude-mem's star count looks like a scraping
+  artifact so marked `unverified`; agentmemory's repo is real but its
+  benchmark/cost claims are self-reported, marked awareness-only), and
+  claude-obsidian (Obsidian+Claude Code PKM, reference-only). Cross-linked
+  rather than duplicated: knowledge/anthropic-dreaming-memory,
+  knowledge/graphiti-zep, knowledge/cognee (all merged in newly-found detail
+  — bi-temporal edges for Graphiti, ECL pipeline for Cognee — and refreshed
+  timestamps). **GitHub trending sweep** (6 views: daily/weekly x
+  overall/Python/TypeScript, all reachable, no proxy block): added
+  harness/openai-codex (competing harness, largest weekly star gain of the
+  whole sweep), harness/claude-plugins-marketplace (Anthropic's own official
+  + community plugin repos), harness/apache-maka (Apache Incubator, no
+  release yet), knowledge/openviking (Volcengine context DB, vendor-reported
+  benchmarks), agent-tooling/deepagents, agent-tooling/browser-harness,
+  agent-tooling/scientific-agent-skills, models/marin (Stanford CRFM
+  training platform; not applicable here), devsec-tools/ai-infra-guard
+  (Tencent red-team platform — best-verified trending finding this week:
+  dated release, named org). Lint pass: no new contradictions or orphans;
+  the two already-flagged stale devsec-tools entries (appsec-toolchain,
+  hexstrike-ai, ~60 days old) are unchanged, no new staleness introduced
+  (every touched/added entry timestamped today). Deferred: several smaller
+  trending repos noted by the research agent but not deep-dived
+  (wshobson/agents, nodeterm, open-slide, context-engineering-kit,
+  context-mode, BrowserSkill, OmniRoute, freellmapi, lfnovo/open-notebook,
+  and a cluster of AI-job-search/trading-bot repos judged thematically
+  off-focus); tinyhumansai/openhuman flagged as currently trending (+1,818
+  stars/week) given this repo's own CLAUDE.md cites it as tokenjuice prior
+  art, but not deep-fetched this pass — worth a dedicated look next scan.
+  memory-v3-opencode (MAGMA/ACT-R synthesis fork) reviewed but not entered:
+  0 stars, single-maintainer fork of another unverified project, too thin a
+  signal for a dedicated entry.
 - 2026-08-27 — Weekly radar-scan (cloud sandbox, 5 parallel research agents,
   one per topic). **harness**: added claude-code-aug2026-updates (subagent
   forking on by default + cross-session messaging + rolling MCP/hook
