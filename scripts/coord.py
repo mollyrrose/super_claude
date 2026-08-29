@@ -435,6 +435,13 @@ def _write_work_md(d: Path, state: dict, stale: int) -> None:
 # --------------------------------------------------------------------------- helpers
 
 SESSION_TRANSCRIPT_MAX_AGE = int(os.environ.get("COORD_SESSION_TRANSCRIPT_MAX_AGE", "900"))
+# Two different sessions' transcripts written within this many seconds of
+# each other = concurrent windows -> a transcript-derived identity guess is
+# ambiguous and mutating commands refuse it (see _session_from_transcripts).
+SESSION_AMBIGUITY_SEC = float(os.environ.get("COORD_SESSION_AMBIGUITY_SEC", "5"))
+
+
+_TRANSCRIPT_GUESS_AMBIGUOUS = False
 
 
 def _session_from_transcripts(start: str | None = None) -> str | None:
@@ -443,51 +450,89 @@ def _session_from_transcripts(start: str | None = None) -> str | None:
     Claude Code does NOT export CLAUDE_SESSION_ID into a tool call's shell, so
     every documented CLI mutation ("claim before editing") died on
     "coord <cmd>: no session" -- the hook worked (its stdin payload carries the
-    id) but the model's own claims never registered. Claude Code appends to
-    ~/.claude/projects/<slug(cwd)>/<session>.jsonl on every tool call, so the
-    most recently written transcript there belongs to the window running this
-    command: it wrote its tool_use record milliseconds ago. Walk up from cwd
-    because a command may run in a subdirectory of the session's project.
+    id) but the model's own claims never registered. Claude Code appends the
+    tool_use record to ~/.claude/projects/<slug>/<session>.jsonl BEFORE the
+    command runs, so the GLOBALLY newest transcript across ALL project dirs
+    belongs to the window running this command.
 
-    Returns None (never a guess) when the project dir is unknown or its newest
-    transcript is older than SESSION_TRANSCRIPT_MAX_AGE, so callers keep their
-    existing "no session" behaviour. Kill switch: COORD_SESSION_FROM_TRANSCRIPT=0.
+    GUEST-WINDOW BUG (r026fed / f2ddf2 lelet, fixed 2026-08-28): the previous
+    version searched only the cwd-slug project dir, so a window VISITING
+    another project's tree found the OTHER window's transcript and mutated the
+    board under a foreign identity (the r9c5a81 mis-post). The scan is now
+    cwd-INDEPENDENT: newest transcript account-wide wins, because the caller
+    wrote its own tool_use milliseconds ago regardless of where cwd points.
+    `start` is accepted for signature compatibility and ignored.
+
+    AMBIGUITY GUARD: when a transcript of a DIFFERENT session was written
+    within SESSION_AMBIGUITY_SEC of the newest one, two windows were writing
+    concurrently and the guess is unsafe -- _TRANSCRIPT_GUESS_AMBIGUOUS is
+    set, and _session() refuses MUTATING commands under such a guess (the
+    caller must pass --session explicitly).
+
+    Returns None (never a guess) when no transcript is fresher than
+    SESSION_TRANSCRIPT_MAX_AGE. Kill switch: COORD_SESSION_FROM_TRANSCRIPT=0.
     """
+    global _TRANSCRIPT_GUESS_AMBIGUOUS
+    _TRANSCRIPT_GUESS_AMBIGUOUS = False
     if os.environ.get("COORD_SESSION_FROM_TRANSCRIPT", "1").strip() in ("0", "false", "False"):
         return None
+    del start  # cwd-independent by design; kept for signature compatibility
     try:
         root = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "projects"
         if not root.is_dir():
             return None
-        d = Path(start).resolve() if start else Path.cwd().resolve()
-        for cand_dir in [d, *d.parents]:
-            slug = re.sub(r"[^A-Za-z0-9]", "-", str(cand_dir))
-            proj = root / slug
-            if not proj.is_dir():
+        now = time.time()
+        best: tuple[float, str] | None = None      # (mtime, session id)
+        runner_up: tuple[float, str] | None = None  # newest with a DIFFERENT id
+        for f in root.glob("*/*.jsonl"):
+            try:
+                m = f.stat().st_mtime
+            except OSError:
                 continue
-            best, best_mtime = None, 0.0
-            for f in proj.glob("*.jsonl"):
-                try:
-                    m = f.stat().st_mtime
-                except OSError:
-                    continue
-                if m > best_mtime:
-                    best, best_mtime = f.stem, m
-            if best and (time.time() - best_mtime) <= SESSION_TRANSCRIPT_MAX_AGE:
-                return best
+            if now - m > SESSION_TRANSCRIPT_MAX_AGE:
+                continue
+            stem = f.stem
+            if best is None or m > best[0]:
+                if best is not None and best[1] != stem:
+                    runner_up = best
+                best = (m, stem)
+            elif stem != best[1] and (runner_up is None or m > runner_up[0]):
+                runner_up = (m, stem)
+        if best is None:
             return None
+        if runner_up is not None and (best[0] - runner_up[0]) <= SESSION_AMBIGUITY_SEC:
+            _TRANSCRIPT_GUESS_AMBIGUOUS = True
+        return best[1]
     except Exception:
         return None
-    return None
 
 
-def _session(args) -> str | None:
-    return (
-        getattr(args, "session", None)
-        or os.environ.get("CLAUDE_SESSION_ID")
-        or _session_from_transcripts()
-        or None
-    )
+def _session(args, mutating: bool = False) -> str | None:
+    """Resolve the calling window's session id.
+
+    Explicit sources (--session, CLAUDE_SESSION_ID) are always trusted. A
+    transcript-derived GUESS is trusted for read-only commands; for MUTATING
+    commands it is refused when two windows wrote transcripts within the
+    ambiguity window (a wrong guess would act on the board under a foreign
+    identity), and otherwise allowed with a one-line stderr note so any
+    misattribution stays visible in the command output."""
+    explicit = getattr(args, "session", None) or os.environ.get("CLAUDE_SESSION_ID")
+    if explicit:
+        return explicit
+    guess = _session_from_transcripts()
+    if guess is None:
+        return None
+    if mutating:
+        if _TRANSCRIPT_GUESS_AMBIGUOUS:
+            sys.stderr.write(
+                "coord: session identity would be GUESSED from transcripts, "
+                "but two windows wrote within the ambiguity window -- refusing "
+                "a mutating command under a guessed identity. Re-run with "
+                "--session <your-session-id>.\n")
+            return None
+        sys.stderr.write(
+            f"[coord] session guessed from newest transcript: {guess[:6]}\n")
+    return guess
 
 
 def _proc_start(pid: int) -> str | None:
@@ -673,7 +718,7 @@ def _register_into(state: dict, args, sid: str, branch: str | None) -> None:
 
 
 def cmd_register(args) -> int:
-    sid = _session(args)
+    sid = _session(args, mutating=True)
     if not sid:
         sys.stderr.write("coord register: no --session and no $CLAUDE_SESSION_ID\n")
         return 2
@@ -693,7 +738,7 @@ def cmd_register(args) -> int:
 
 
 def cmd_beat(args) -> int:
-    sid = _session(args)
+    sid = _session(args, mutating=True)
     if not sid:
         sys.stderr.write("coord beat: no session\n")
         return 2
@@ -725,7 +770,7 @@ def cmd_beat(args) -> int:
 
 
 def cmd_claim(args) -> int:
-    sid = _session(args)
+    sid = _session(args, mutating=True)
     if not sid:
         sys.stderr.write("coord claim: no session\n")
         return 2
@@ -767,7 +812,7 @@ def cmd_claim(args) -> int:
 
 
 def cmd_release(args) -> int:
-    sid = _session(args)
+    sid = _session(args, mutating=True)
     if not sid:
         sys.stderr.write("coord release: no session\n")
         return 2
@@ -792,7 +837,7 @@ def cmd_release(args) -> int:
 
 
 def cmd_done(args) -> int:
-    sid = _session(args)
+    sid = _session(args, mutating=True)
     if not sid:
         sys.stderr.write("coord done: no session\n")
         return 2
@@ -833,7 +878,7 @@ def cmd_request(args) -> int:
     Use for cross-window asks coord can't do for you -- e.g. 'engine-owner:
     cherry-pick commit 60a8123 (Q1.6 safety fix) into main'. The target window
     sees it in its next-turn context and acts or declines."""
-    sid = _session(args)
+    sid = _session(args, mutating=True)
     if not sid:
         sys.stderr.write("coord request: no session\n")
         return 2
@@ -863,7 +908,7 @@ def cmd_reply(args) -> int:
     DECISION-GATE: if the ask needs an irreversible op (merge to main, push,
     rebase of live files), do NOT execute it autonomously -- reply with the
     PROPOSED command and 'needs user approval', and surface it to the user."""
-    sid = (_session(args) or "")[:6]
+    sid = (_session(args, mutating=True) or "")[:6]
     d = journal_dir()
 
     def op():
