@@ -66,9 +66,11 @@ The user's `/qPlan` invocation may begin with a YAML config block. Defaults
 if absent:
 
 ```yaml
-critic_provider: panel         # panel | claude | openai
+critic_provider: panel         # panel | claude | openai | council
                                # panel (DEFAULT) = max-mode multi-lens critic fleet
                                # claude / openai = v1 single-critic backwards-compat
+council_min_voices: 2          # council needs >=2 active voices; below -> degrade (see Council mode)
+council_rank_aggregation: borda  # fixed in v1; documented for forward-compat
 panel_lenses:                  # max-mode default — all 22 lenses on
   # ----- 15 installed-skill lenses -----
   - requirements               # requirements-analyst + ask-questions-if-underspecified
@@ -590,6 +592,82 @@ In exchange you get cumulative cross-model refinement and far less duplicate
 noise. For a quick pass set `provider_relay: false` (parallel merge) or use
 `critic_provider: claude`.
 
+### Council mode (anonymized peer ranking)
+
+`critic_provider: council` replaces the critic turn with a two-phase
+provider-voice protocol instead of the panel/relay lens fleet.
+
+1. **Scope.** Voices = the cross-model critic scripts only (`claude-direct`,
+   `openai`, `deepseek`, `glm`, `glm-free`, `subq`, `subq-free`, `ornith`),
+   rostered from `relay_order` with the SAME mute rules as relay mode. The 22
+   internal Claude-side lenses do NOT run in council mode. `provider_relay`
+   is ignored (council is inherently parallel-then-rank). The session model
+   is the CHAIRMAN: it orchestrates, anonymizes, aggregates, and
+   synthesizes — it does NOT submit a critique and does NOT vote (else brand
+   bias re-enters through the session provider).
+2. **Phase 1 — critique fan-out.** Every rostered voice gets the IDENTICAL
+   payload `{task, plan, ledger}` via its script (parallel Bash calls).
+   Exit-2 = muted, logged one line in the transcript. Voices returning valid
+   `{verdict, suggestions[]}` JSON form the ACTIVE set.
+3. **Minimum-voice guard.** If active voices < `council_min_voices` (2),
+   council degrades for this round: run the `critic_provider: claude`
+   single-critic turn instead and write `council degraded: only N active
+   voice(s)` to the transcript. The round never dies from muting.
+4. **Phase 2 — anonymization.** Order the active critiques by the SHA-256
+   hex of each critique's raw JSON text (ascending) and assign labels A, B,
+   C, ... in that order — deterministic, reproducible, decorrelated from
+   provider order. Strip the `provider`, `model`, `backend`,
+   `chunks_submitted` fields. Scrub self-identifying text inside every
+   suggestion: case-insensitive replace of `openai`, `gpt`, `chatgpt`,
+   `deepseek`, `claude`, `anthropic`, `glm`, `z.ai`, `zhipu`, `subq`,
+   `ornith`, `llama` with `[model]`. PATH GUARD on the scrub: replace only
+   whole-word matches that are NOT immediately preceded or followed by a
+   path/identifier character (backslash, forward slash, dot, tilde,
+   underscore, hyphen) — an unguarded replace turns legitimate technical
+   content like `~/.claude/.coord` into `~/.[model]/.coord` and corrupts the
+   very critique being ranked. Scrubbed copies exist ONLY for the phase-3
+   ranking prompt; retain the originals untouched. Write the label->provider
+   map to `<workdir>/council_round<N>_map.json`. The map NEVER appears in
+   any ranking prompt.
+5. **Phase 3 — peer ranking.** Every ACTIVE voice is called a second time
+   through its OWN script (existing contract, no script changes) with
+   payload: `task` = the ranking instruction, `plan` = the anonymized
+   critiques block, `ledger` = []. The ranking instruction (documented
+   verbatim at invocation time) tells the voice: authorship is hidden; rank
+   ALL critiques best-first by concreteness, correctness, and material
+   impact on the plan; return the STANDARD JSON shape with
+   `verdict: "no material issue"` and `suggestions` containing EXACTLY ONE
+   entry whose text begins `RANKING: ` followed by labels joined by ` > `
+   (example: `RANKING: C > A > B`). The chairman parses ballots with the
+   regex `RANKING:\s*([A-Z](?:\s*>\s*[A-Z])*)`. A ballot that mutes (exit
+   2), fails the regex, or ranks unknown labels is DROPPED and noted in the
+   transcript. Each voice ranks all critiques including its own (authorship
+   stripped; symmetric self-vote opportunity — accepted noise, documented as
+   such).
+6. **Phase 4 — aggregation (Borda).** In a ballot ranking N labels, position
+   p (1-based) scores N-p points; labels missing from a ballot score 0 from
+   it. Sum across valid ballots. Tie-break: (1) more first-place votes,
+   (2) lexicographically smaller label. Requires >=1 valid ballot; with 0
+   valid ballots, fall back to the plain panel merge of all suggestions (no
+   ranking) and note it.
+7. **Phase 5 — chairman synthesis.** De-anonymize via the map file. Append
+   `#### Round N - council synthesis` to the transcript with a table
+   (label | provider | borda | first-place votes) followed by the
+   top-ranked critiques' improvements presented first. ALL suggestions
+   still feed the normal ledger semantic-match step (loop step c) tagged
+   `source_lens: <provider>` plus `council_rank: <int>` — the author-react
+   step processes them in rank order. The ledger and the author-react step
+   receive the ORIGINAL (unscrubbed) suggestion texts — the scrubbed copies
+   never leave phase 3. Merged round verdict = worst of the per-voice
+   verdicts. From there the v1 loop (tiers, no_progress, termination) runs
+   UNCHANGED.
+8. **Cost note.** Council = 2 script calls per active voice per round
+   (critique + ballot).
+9. **Failure modes.** Voice mutes in phase 1 (roster shrinks; guard at 2);
+   voice mutes in phase 3 (ballot dropped); all ballots invalid (fall back
+   to plain merge); map file write fails (abort the round's council path,
+   fall back to single-critic, never guess authorship from memory).
+
 ### When to use which provider
 
 - **`panel` (default)** — non-trivial design / architecture work that
@@ -599,6 +677,8 @@ noise. For a quick pass set `provider_relay: false` (parallel merge) or use
 - **`openai`** — explicit cross-model provider check, no panel. Useful
   when the v1 OpenAI critic already surfaced a real disagreement worth
   isolating.
+- **`council`** — cross-model disagreement resolution with brand bias
+  stripped; costlier — 2 calls per voice.
 
 ### Failure modes specific to panel mode
 

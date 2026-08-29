@@ -64,7 +64,7 @@ from plan_chunker import (  # noqa: E402
     split_plan,
 )
 
-CRITIC_PROMPT = """You are the critic in a qPlan author↔critic loop.
+CRITIC_PROMPT = """You are the critic in a qPlan author<->critic loop.
 
 Read the plan and the ledger of prior suggestions. Produce a JSON verdict
 EXACTLY in this shape:

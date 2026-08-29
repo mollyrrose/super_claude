@@ -44,7 +44,7 @@ import sys
 import urllib.error
 import urllib.request
 
-CRITIC_PROMPT = """You are the critic in a qPlan author↔critic loop.
+CRITIC_PROMPT = """You are the critic in a qPlan author<->critic loop.
 
 Read the plan and the ledger of prior suggestions. Produce a JSON verdict
 EXACTLY in this shape:
@@ -300,7 +300,10 @@ def main() -> None:
     override = req_in.get("model")
 
     if backend == "api":
-        api_key = os.environ["ANTHROPIC_API_KEY"]
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            sys.stderr.write("claude_critic: backend forced to api but ANTHROPIC_API_KEY is not set. Lens muted.\n")
+            sys.exit(2)
         model = override or _api_pick_model(api_key)
         verdict = call_api(api_key, model, prompt)
         model_used = model
