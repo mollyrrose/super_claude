@@ -150,29 +150,6 @@ def _rule_design(text_lc: str) -> Suggestion | None:
     return None
 
 
-def _rule_fable_orchestration(text_lc: str) -> Suggestion | None:
-    patterns = [
-        r"\bfable.{0,30}\borchestrat",
-        r"\badvisor.{0,20}\bfable\b",
-        r"\bfable.{0,20}\badvisor\b",
-        r"\broute.{0,30}\bfable\b",
-        # NOTE: fable+opus alone risks false positives on "fable vs opus" comparisons;
-        # require a delegation/orchestration co-signal to narrow
-        r"\bfable.{0,30}\bopus.{0,30}\b(?:delegate|orchestrat|architect|spawn|setup)\b",
-        r"\bfable.{0,30}\bdelegate\b",
-        r"\bfable.{0,30}\barchitect\b",
-        r"/advisor\s+fable\b",  # \b before / is a non-word boundary -- use plain prefix
-        r"\bfable[-\s]driven\b",
-        r"\bset up.{0,30}\bfable\b",
-    ]
-    if _matches_any(text_lc, patterns):
-        return Suggestion(
-            "/fable-orchestration",
-            "looks like a Fable 5 orchestration setup -- /fable-orchestration has the wiring patterns and prompt kit",
-        )
-    return None
-
-
 def _rule_refactor_implement(text_lc: str, raw: str) -> Suggestion | None:
     keyword_patterns = [
         # `implement|build|add … noun` with up to 60 chars between
@@ -204,7 +181,6 @@ _RULES: list[Callable[..., Suggestion | None]] = [
     _rule_release_check,
     _rule_sprint_audit,
     _rule_research,
-    _rule_fable_orchestration,  # before _rule_design: fable-specific orchestration trigger
     _rule_design,
     # _rule_refactor_implement is special -- needs the raw text for file-path detection.
 ]

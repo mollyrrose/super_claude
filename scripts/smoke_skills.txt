@@ -19,7 +19,6 @@ focus-group
 hermes-curate
 hermes-learn
 rev-learn
-fable-orchestration
 suggest-skill
 skillspector-gate
 ponytail-review

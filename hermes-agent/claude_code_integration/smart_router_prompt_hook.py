@@ -171,7 +171,12 @@ def main() -> int:
         pass  # logger must never block the prompt
 
     hints: list[str] = []
-    if suggestion is not None:
+    # Visible skill-suggestion injection is OFF by default (2026-08-29): a
+    # transcript audit found it fired every turn but was acted on 0 times across
+    # 1613 sessions, so it only spent context budget. The prediction is still
+    # recorded by _log_eval_row above (data for a future learned router), which
+    # is the part that accumulates value. Re-enable with SMART_ROUTER_SUGGEST_INJECT=1.
+    if suggestion is not None and os.environ.get("SMART_ROUTER_SUGGEST_INJECT", "0").strip() in ("1", "true", "True"):
         hints.append(format_suggestion(suggestion))
     if tier is not None:
         tier_hint = format_model_tier(tier)

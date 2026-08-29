@@ -75,7 +75,6 @@ For each suggestion, give: **skill name** + one sentence on why it fits and what
 - `/rev-learn` -- extract learnings from qRev results into semgrep rules and memory
 
 ### Orchestration / Agents
-- `/fable-orchestration` -- set up Fable 5 as architect with Opus 4.8 executor fleet; use for complex multi-step plans that need top-tier reasoning at the design stage
 - `/qDo` -- one-shot task execution, lighter than qGoal; use for a bounded task with clear scope
 
 ### Documentation / Status

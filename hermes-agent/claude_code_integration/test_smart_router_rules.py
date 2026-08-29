@@ -10,7 +10,6 @@ import unittest
 
 from smart_router_rules import (
     Suggestion,
-    _rule_fable_orchestration,
     classify_prompt,
     format_suggestion,
     recommend_mode_effort,
@@ -182,56 +181,6 @@ class TestClassifyPrompt(unittest.TestCase):
         self.assertSkill(
             "should we mark this ready to release after the smoke test passes?",
             "/check",
-        )
-
-
-class TestFableOrchestrationRule(unittest.TestCase):
-    """Regression coverage for the two 2026-07-07 pattern fixes:
-    (a) `/advisor fable` uses a plain prefix (a \\b before `/` never matches
-        after whitespace), (b) fable+opus requires a delegation co-signal so
-        plain comparison questions stay unrouted. The rule takes LOWERCASED
-        text (classify_prompt lowercases before dispatch)."""
-
-    def test_advisor_fable_mid_prompt_matches(self) -> None:
-        # classify_prompt skips prompts STARTING with a slash command, so the
-        # /advisor pattern only ever fires mid-prompt -- test it there.
-        r = _rule_fable_orchestration(
-            "set the model to opus 4.8 then run /advisor fable to wire it up"
-        )
-        self.assertIsNotNone(r)
-        assert r is not None
-        self.assertEqual(r.skill, "/fable-orchestration")
-
-    def test_fable_orchestrate_matches(self) -> None:
-        r = _rule_fable_orchestration("use fable to orchestrate opus delegates")
-        self.assertIsNotNone(r)
-
-    def test_route_fable_matches(self) -> None:
-        r = _rule_fable_orchestration("how do i route fable to opus workers")
-        self.assertIsNotNone(r)
-
-    def test_fable_driven_matches(self) -> None:
-        r = _rule_fable_orchestration("fable-driven pipeline setup for the repo")
-        self.assertIsNotNone(r)
-
-    def test_fable_opus_with_cosignal_matches(self) -> None:
-        r = _rule_fable_orchestration("wire fable above opus to orchestrate the build")
-        self.assertIsNotNone(r)
-
-    def test_fable_opus_comparison_no_match(self) -> None:
-        # The narrowed fable+opus pattern must NOT fire on comparison questions.
-        self.assertIsNone(
-            _rule_fable_orchestration("is fable better than opus on benchmarks?")
-        )
-
-    def test_fable_opus_no_cosignal_no_match(self) -> None:
-        self.assertIsNone(
-            _rule_fable_orchestration("fable opus comparison benchmark results")
-        )
-
-    def test_plain_fable_mention_no_match(self) -> None:
-        self.assertIsNone(
-            _rule_fable_orchestration("what do you think about the fable model?")
         )
 
 
