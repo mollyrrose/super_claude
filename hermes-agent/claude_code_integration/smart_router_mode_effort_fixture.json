@@ -1,0 +1,17 @@
+[
+  {"prompt": "prove this algorithm is optimal from first principles", "mode": "ALGORITHM", "effort": "E5", "tier": "fable"},
+  {"prompt": "derive the formal complexity bound for the scheduler", "mode": "ALGORITHM", "effort": "E5", "tier": "fable"},
+  {"prompt": "design an adversarial threat-model analysis of the signing flow", "mode": "ALGORITHM", "effort": "E5", "tier": "fable"},
+  {"prompt": "use the strongest model to derive the optimal caching algorithm", "mode": "ALGORITHM", "effort": "E5", "tier": "fable"},
+  {"prompt": "how should we architect the new authentication service", "mode": "NATIVE", "effort": "E4", "tier": "opus"},
+  {"prompt": "security audit of the new payments module", "mode": "NATIVE", "effort": "E4", "tier": "opus"},
+  {"prompt": "research the deep tradeoffs of our storage design", "mode": "NATIVE", "effort": "E4", "tier": "opus"},
+  {"prompt": "what is the root-cause of the intermittent regression here", "mode": "NATIVE", "effort": "E4", "tier": "opus"},
+  {"prompt": "implement the geo session handler feature end-to-end", "mode": "NATIVE", "effort": "E3", "tier": "sonnet"},
+  {"prompt": "refactor the whole ingestion module for clarity", "mode": "NATIVE", "effort": "E3", "tier": "sonnet"},
+  {"prompt": "build the new metrics pipeline across the ingestion service", "mode": "NATIVE", "effort": "E3", "tier": "sonnet"},
+  {"prompt": "write the integration tests for the new endpoint", "mode": "NATIVE", "effort": "E3", "tier": "sonnet"},
+  {"prompt": "rename the helper variable in this file please", "mode": "MINIMAL", "effort": "E1", "tier": "haiku"},
+  {"prompt": "bump the version number in the setup file", "mode": "MINIMAL", "effort": "E1", "tier": "haiku"},
+  {"prompt": "list all the functions in this module please", "mode": "MINIMAL", "effort": "E1", "tier": "haiku"}
+]

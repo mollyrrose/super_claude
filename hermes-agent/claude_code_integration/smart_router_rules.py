@@ -407,3 +407,46 @@ def format_model_tier(tier: ModelTier) -> str:
         f"{tier.why}. The main session keeps full context regardless of the subagent's model. "
         f"Suggestion only -- skip it for quick conversational turns or if the user chose otherwise."
     )
+
+
+# ── Mode/effort routing (additive; pure function of the model tier) ────────
+#
+# Derives a coarse MODE (MINIMAL / NATIVE / ALGORITHM) and a fine EFFORT band
+# (E1..E5) purely from the tier that recommend_model_tier() already computed.
+# This keeps {mode, effort, tier} consistent with recommend_model_tier by
+# construction -- recommend_model_tier() and classify_prompt() are NEVER
+# modified by this addition.
+
+
+@dataclass(frozen=True)
+class ModeEffort:
+    mode: str    # "MINIMAL" | "NATIVE" | "ALGORITHM"
+    effort: str  # "E1".."E5"
+    tier: str    # the model tier this was derived from
+
+
+# Pure derivation from the model tier -- keeps {mode,effort,tier} consistent
+# with recommend_model_tier by construction.
+_TIER_MODE_EFFORT: dict[str, tuple[str, str]] = {
+    "fable":  ("ALGORITHM", "E5"),
+    "opus":   ("NATIVE",    "E4"),
+    "sonnet": ("NATIVE",    "E3"),
+    "haiku":  ("MINIMAL",   "E1"),
+}
+
+
+def recommend_mode_effort(text: str) -> ModeEffort | None:
+    """Derive a (mode, effort) hint from the prompt's model tier.
+    Returns None whenever recommend_model_tier returns None (same conservative
+    bar: slash command, <4 words, or no clear phase match)."""
+    tier = recommend_model_tier(text)
+    if tier is None:
+        return None
+    mode, effort = _TIER_MODE_EFFORT[tier.model]
+    return ModeEffort(mode, effort, tier.model)
+
+
+def format_mode_effort(me: ModeEffort) -> str:
+    """Compact suffix appended to the existing model-tier hint line (token-floor
+    friendly: no new line, 28-31 chars depending on the mode label). ASCII only."""
+    return f" [mode: {me.mode} | effort: {me.effort}]"

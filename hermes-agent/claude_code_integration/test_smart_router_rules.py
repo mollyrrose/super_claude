@@ -13,6 +13,7 @@ from smart_router_rules import (
     _rule_fable_orchestration,
     classify_prompt,
     format_suggestion,
+    recommend_mode_effort,
     recommend_model_tier,
 )
 
@@ -294,6 +295,40 @@ class TestFormatSuggestion(unittest.TestCase):
         self.assertLess(
             len(text), 400, f"format_suggestion output should be < 400 chars; got {len(text)}"
         )
+
+
+class TestRecommendModeEffort(unittest.TestCase):
+    def assertME(self, prompt, mode, effort, tier):
+        me = recommend_mode_effort(prompt)
+        self.assertIsNotNone(me, f"None for {prompt!r}")
+        self.assertEqual((me.mode, me.effort, me.tier), (mode, effort, tier), prompt)
+
+    def test_fable_algorithm_e5(self):
+        self.assertME("prove this algorithm is optimal from first principles", "ALGORITHM", "E5", "fable")
+
+    def test_opus_native_e4(self):
+        self.assertME("security audit of the new payments module", "NATIVE", "E4", "opus")
+
+    def test_sonnet_native_e3(self):
+        self.assertME("implement the geo session handler feature end-to-end", "NATIVE", "E3", "sonnet")
+
+    def test_haiku_minimal_e1(self):
+        self.assertME("rename the helper variable in this file please", "MINIMAL", "E1", "haiku")
+
+    def test_none_when_tier_none(self):
+        self.assertIsNone(recommend_mode_effort("hi there how are you"))
+
+    def test_slash_command_none(self):
+        self.assertIsNone(recommend_mode_effort("/think plan this out end to end"))
+
+    def test_consistency_with_tier(self):
+        # mode/effort must never disagree with recommend_model_tier
+        for p in ["prove this is optimal from first principles",
+                  "how should we architect the new auth service",
+                  "refactor the whole ingestion module for clarity",
+                  "bump the version number in the setup file"]:
+            t = recommend_model_tier(p); me = recommend_mode_effort(p)
+            self.assertEqual(me.tier, t.model, p)
 
 
 if __name__ == "__main__":

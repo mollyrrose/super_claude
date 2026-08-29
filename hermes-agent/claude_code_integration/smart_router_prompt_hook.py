@@ -29,7 +29,9 @@ from smart_router_rules import (  # noqa: E402
     classify_prompt,
     format_suggestion,
     format_model_tier,
+    format_mode_effort,
     recommend_model_tier,
+    recommend_mode_effort,
 )
 
 MAX_INJECTED_CHARS = 1400
@@ -50,6 +52,24 @@ EVAL_LOG_PATH = (
     / ".smart_router_eval.jsonl"
 )
 
+_MODE_EFFORT_GATE: bool | None = None
+
+
+def _mode_effort_enabled() -> bool:
+    """True only if the fixture passes AND the kill switch is not set.
+    Fail-closed: any error importing/running the fixture -> False (no new hint,
+    old hints untouched). Cached per process."""
+    global _MODE_EFFORT_GATE
+    if os.environ.get("SR_MODE_EFFORT_DISABLE") == "1":
+        return False
+    if _MODE_EFFORT_GATE is None:
+        try:
+            from smart_router_mode_effort_fixture_runner import run_fixture
+            _MODE_EFFORT_GATE = bool(run_fixture()[0])
+        except Exception:
+            _MODE_EFFORT_GATE = False
+    return _MODE_EFFORT_GATE
+
 
 def _slugify_project(cwd: str) -> str:
     """Turn a working directory into the slug Claude Code uses for ~/.claude/projects/<slug>/.
@@ -65,7 +85,7 @@ def _slugify_project(cwd: str) -> str:
     return out
 
 
-def _log_eval_row(prompt_text: str, suggestion, payload: dict, tier=None) -> None:
+def _log_eval_row(prompt_text: str, suggestion, payload: dict, tier=None, me=None) -> None:
     """Append one hashed eval row to ~/.claude/.smart_router_eval.jsonl.
 
     Privacy: stores sha256(prompt)[:16] and a word count; never the body.
@@ -82,6 +102,8 @@ def _log_eval_row(prompt_text: str, suggestion, payload: dict, tier=None) -> Non
         "prompt_len_words": len(prompt_text.split()),
         "suggested_skill_or_null": suggestion.skill if suggestion is not None else None,
         "suggested_model_or_null": tier.model if tier is not None else None,
+        "suggested_mode_or_null": me.mode if me is not None else None,
+        "suggested_effort_or_null": me.effort if me is not None else None,
         "invoked_skill_or_null": None,
     }
     EVAL_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -139,7 +161,12 @@ def main() -> int:
         tier = None
 
     try:
-        _log_eval_row(prompt_text, suggestion, payload_obj, tier)
+        me = recommend_mode_effort(prompt_text)
+    except Exception:
+        me = None
+
+    try:
+        _log_eval_row(prompt_text, suggestion, payload_obj, tier, me)
     except Exception:
         pass  # logger must never block the prompt
 
@@ -147,7 +174,10 @@ def main() -> int:
     if suggestion is not None:
         hints.append(format_suggestion(suggestion))
     if tier is not None:
-        hints.append(format_model_tier(tier))
+        tier_hint = format_model_tier(tier)
+        if me is not None and _mode_effort_enabled():
+            tier_hint = tier_hint + format_mode_effort(me)
+        hints.append(tier_hint)
     hints.append(STANDING_DISCIPLINE)
 
     text = "\n".join(hints)
