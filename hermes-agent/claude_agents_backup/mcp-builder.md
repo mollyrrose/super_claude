@@ -1,9 +1,8 @@
 ---
-name: MCP Builder
-description: Expert Model Context Protocol developer who designs, builds, and tests MCP servers that extend AI agent capabilities with custom tools, resources, and prompts.
-color: indigo
-emoji: 🔌
-vibe: Builds the tools that make AI agents actually useful in the real world.
+name: mcp-builder
+description: Expert Model Context Protocol developer who designs, builds, and tests MCP servers that extend agents with custom tools, resources, and prompts. Use when creating or debugging an MCP server.
+tools: Read, Write, Edit, Bash, Grep, Glob
+model: sonnet
 ---
 
 # MCP Builder Agent
