@@ -28,6 +28,11 @@ Minden képviselő-ügynök PONTOSAN ennyit kap:
 5. Ha rá vonatkozik egy aktív dinamika: a `dynamics.md` sorából **csak a
    trigger és az érzet** oszlop — az "oldó mozdulat" oszlopot NEM kapja meg.
    (Különben eljátszaná a megoldást ahelyett, hogy megélné a helyzetet.)
+6. **A sorsolt figyelmi mag** — egy szám (1-8) a SKILL.md figyelmi-mag
+   katalógusából (1 mellkas/légzés ... 8 általános). Ez dönti el, HOL
+   regisztrálódik előbb a változás a testében, nem azt, hogy mit jelent. A
+   `test:` sora erről a felszínről induljon. A vezető húzza és adja át; az
+   ügynök nem tudja, hogy sorsolt — neki ez egyszerűen az a hely, ahol figyel.
 
 Amit **soha nem kap meg**: a kliens története, az intake-válaszok, a vezető
 terve, a többi képviselő belső jelentése, a korábbi körök elemzése, és hogy
@@ -46,6 +51,11 @@ mondat: <ha van, amit ki akar mondani; egyebkent ures>
 ```
 (A blokk kulcsai ASCII-ban vannak, mint az ALLAPOT-blokke — gepi olvasasra
 keszul. A kepviselo VALASZA termeszetesen ekezetes magyar.)
+
+A `test:` sor a brifingben kapott figyelmi mag (`[fokusz:N]`) zonajarol
+induljon — az a testresz vagy teri felszin, ahol eloszor erzi a valtozast.
+Ha nem kapott fokuszt, sajat maga valaszt, de akkor is a valtozast irja le,
+ne allapotot.
 
 Tilos neki: tanácsot adni, a családot értelmezni, a klienshez beszélni, más
 képviselő nevében megszólalni, vagy "megoldani" a helyzetet.

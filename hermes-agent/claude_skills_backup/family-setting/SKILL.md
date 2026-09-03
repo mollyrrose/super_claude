@@ -38,11 +38,18 @@ látják a kliens történetét sem, csak azt, ami a térben van és elhangzott.
 
 - A részletes szabályok: `references/multi-agent.md`. Ha ebben a módban
   futsz, azt a fájlt az ülés elején olvasd be.
-- **Fokozatok**: `egy` (**alapértelmezés**: a vezető szólaltat meg mindenkit),
-  `kozepes` (3-4 képviselő külön ügynök + 3 lencse), `teljes` (mindenki külön
-  ügynök + 5 lencse + keresztmodell-hang). A felhasználó kérhet fokozatot.
-  *Az `egy` az alap, mert a többügynökös módban körönként több perc telik el,
-  és a disztressz-ág épp attól működik, hogy azonnal tudsz reagálni.*
+- **Fokozatok**: `kozepes` (**alapértelmezés**: 3-4 képviselő külön, egymást
+  NEM látó ügynök + 3 lencse), `teljes` (mindenki külön ügynök + 5 lencse +
+  keresztmodell-hang), `egy` (a vezető szólaltat meg mindenkit — **csak
+  visszaesés**, lásd a (D)/(K) és a nincs-ügynök ágat lent). A felhasználó
+  kérhet fokozatot.
+  *A `kozepes` az alap, mert a "színház"-hatás — egyetlen kontextus kitalálja
+  minden képviselő érzését, és a kézenfekvő végkifejlet felé sétál — pontosan
+  akkor lép fel, ha a vezető szólaltat meg mindenkit. A vak, több-ügynökös mód
+  ez ellen szerkezeti védelem: a képviselő fizikailag nem kapja meg a problémát,
+  így nem tudja kikövetkeztetni a megoldást. Cserébe körönként több hívás és
+  több idő — ezt az elején kimondod. Kivétel: a disztressz-ág (lent) azonnali
+  reakciót kíván, ezért (D)/(K) jelzésnél az ülés `egy` módba esik vissza.*
 - **A keresztmodell-hang MINDIG külön beleegyezéshez kötött**, bármelyik
   fokozatban: egy másik cég modellje látja a tablót és az elhangzott
   mondatokat. Ezt a 0. fázisban mondod ki, MIELŐTT bármi elhangzana:
@@ -614,6 +621,24 @@ Minden kör:
    ÁLLAPOT-blokk mindenkire kiterjed. (Hat képviselő mind a négy réteggel
    minden körben olvashatatlan szövegfal.)
    Nem mind a négy réteg minden megszólalónál.
+
+   **Figyelmi mag (sorsolt) — ez teszi a választ megjósolhatatlanná.**
+   A sor kiválasztása véletlen, de a képviselő ÉRZETE ne legyen kikövetkeztethető
+   a legkézenfekvőbb helyről. Ezért minden megszólaló képviselőhöz húzz EGY
+   számot (1-8): az dönti el, HOL regisztrálódik előbb a változás, nem azt, hogy
+   MIT jelent. A katalógus semleges, testi/téri felszín, sosem értelmezés:
+   1 mellkas/légzés; 2 gyomor/has; 3 torok/váll; 4 kéz/kar; 5 láb/talp;
+   6 hát/tarkó (ami mögötte van); 7 tekintet iránya; 8 általános (nincs kiemelt
+   pont). A húzott felszínről induljon a "mi változott". A húzás jele a
+   válaszban látszik: `[fokusz:5]`.
+   Sorsolás körönként egy lista, a megszólalók sorrendjében fogyasztod:
+   `python -c "import random; print([random.randint(1,8) for _ in range(6)])"`
+   Ha a shell nem elérhető, dolgozz `[fokusz nelkul]` jelöléssel — látható, nem
+   csendes. Több-ügynökös módban a húzott számot a képviselő brífingje kapja
+   meg (lásd `references/multi-agent.md`), nem a vezető szűri.
+   *Őszinte korlát: ez a felszínt randomizálja, nem a jelentést — meglepetés-
+   forrás, nem "tudó mező". Ugyanaz az elv, mint a Systembrett-kockáé: a
+   véletlen kérdés- vagy kontextusvezérelt, sosem amorf.*
 
    **A kérdés formája számít.** A szakirodalom szerint a képviselő nem "hordoz"
    idegen érzéseket, hanem a **saját korábbi állapotához képesti különbséget**
