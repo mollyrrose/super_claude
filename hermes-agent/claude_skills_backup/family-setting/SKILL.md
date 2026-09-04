@@ -512,7 +512,7 @@ tényekre, nem értelmezésekre:
 erőltesd. Indulj a puszta problémával: kliens-képviselő + a probléma mint
 tényező + a két szülő képviselője. A hiányzó adat menet közben is bejöhet.
 
-### 2. Felállítás (kezdő tabló 4-6, felső korlát 10)
+### 2. Felállítás (kezdő tabló 4-6, felső korlát 14)
 
 Olvasd be: `references/methodology.md`.
 
@@ -538,7 +538,15 @@ nyolcat az elején, még ha kínálkozna is. Menet közben a húzott sorok újak
 kérnek (egy struktúra-sor például Akadályt ÉS Erőforrást is igényelhet), és
 próbafutásokban a tabló emiatt már a 3. körre betelt, ami a maradék hat kört
 megfosztotta a leggyakoribb oldó mozdulattól. Hagyj helyet a folyamatnak.
-- **Felső korlát: 10 képviselő.** Efölött nem hozol be újat.
+- **Felső korlát: 14 képviselő.** Efölött nem hozol be újat.
+  *(2026-09-04-ig 10 volt. A korlát célja nem létszám-fegyelem, hanem hogy a
+  tabló ne teljen be már a 3. körre, és maradjon hely az oldó mozdulatoknak —
+  ezt a "kezdő tabló 4-6" szabály önmagában is biztosítja. Éles ülésben viszont
+  a 10 amputálta a kliens saját, konkrétan megnevezett elemeit, és a kényszerű
+  nyugdíjazások egy körön belül mérhető veszteséget okoztak: két képviselő
+  jelezte, hogy a frissen kiürült helyekről "húzás jön, nem tartás". Az
+  olvashatóságot nem a létszám védi, hanem a "körönként 2-6 képviselő szólal
+  meg" szabály. Kill switch: írd vissza a számot 10-re.)*
 - **Használj újra álló képviselőt**, ha a szerep ráilleszthető — egy már
   felállított "félelem" lehet ugyanannak a sornak az Akadálya is. Ez
   megengedett, sőt előnyben részesített.
@@ -576,7 +584,7 @@ Minden kör:
 
    **Admisszibilitási teszt** (enélkül vagy minden elbukik, vagy semmi):
    a sor **játszható**, ha (i) a trigger-feltételéhez tartozó elem áll a
-   tablóban, VAGY egy mondattal felállítható a 10-es korláton belül, ÉS
+   tablóban, VAGY egy mondattal felállítható a 14-es korláton belül, ÉS
    (ii) nem mond ellent egy megerősített ténynek. Minden más esetben
    **játszható** — a bizonytalanság a játszhatóság javára dől el, nem ellene.
    Csak akkor veted el, ha konkrétan meg tudod nevezni, mi hiányzik hozzá.
@@ -616,10 +624,12 @@ Minden kör:
    utólag is látszik, mi jött a sorsolásból és mi a te döntésedből.
 3. **A képviselők megszólalnak** — mindegyiknél négy réteg:
    **gondolat/benyomás**, **érzés**, **testi érzet**, **mozdulat-impulzus**.
-   **Körönként 2-4 képviselő szólal meg**, nem mind: akit a húzott sor érint,
+   **Körönként 2-6 képviselő szólal meg**, nem mind: akit a húzott sor érint,
    plusz akinél az előző kör óta változás volt. A többiek némák — de az
-   ÁLLAPOT-blokk mindenkire kiterjed. (Hat képviselő mind a négy réteggel
-   minden körben olvashatatlan szövegfal.)
+   ÁLLAPOT-blokk mindenkire kiterjed. (2026-09-04-ig 2-4 volt; a 14-es
+   létszám-korláttal együtt emeltük 6-ra. A felső határ akkor is éles: hatnál
+   több megszólaló, mind a négy réteggel, olvashatatlan szövegfal — hatnál
+   inkább rövidítsd a rétegeket, ne told feljebb a létszámot.)
    Nem mind a négy réteg minden megszólalónál.
 
    **Figyelmi mag (sorsolt) — ez teszi a választ megjósolhatatlanná.**
