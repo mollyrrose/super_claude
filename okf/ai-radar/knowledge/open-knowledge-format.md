@@ -3,8 +3,8 @@ type: pattern
 title: Open Knowledge Format (OKF) v0.1 -> v0.2
 description: Vendor-neutral spec for agent-ready knowledge — markdown + YAML frontmatter, one required field (type). v0.2 (2026-07-25) added provenance/trust/lifecycle fields with two breaking renames.
 tags: [okf, knowledge, google, markdown, agent-memory]
-timestamp: 2026-08-27T00:00:00Z
-resource: https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md
+timestamp: 2026-09-08T00:00:00Z
+resource: https://github.com/GoogleCloudPlatform/open-knowledge-format
 status: current
 supersedes: []
 ---
@@ -70,3 +70,22 @@ optional fields). No v0.3 found as of this scan.
 v0.2 field names (`generated.at`, `sources`) is a deliberate schema
 migration, not a lint-safe fix — left for a dedicated pass rather than
 applied here.
+
+# Update (2026-09-08 scan): spec moved to its own repo; third-party tooling emerging
+
+On 2026-08-21 the spec's canonical home moved out of
+`GoogleCloudPlatform/knowledge-catalog` into a standalone
+`GoogleCloudPlatform/open-knowledge-format` repo (two commits: pointing
+readers at the new repo, and making every timestamp an ISO 8601 datetime
+with an explicit offset). Version is still v0.2 — no v0.3 activity found.
+The new repo is small (344 stars, 11 watchers, 18 forks, 6 commits on main,
+Apache-2.0) — reads as an organizational move (giving OKF its own top-level
+identity) rather than a spec change; adoption signal is still weak.
+
+Separately, the first visible third-party OKF tooling has appeared outside
+Google: `scaccogatto/okf-skills` (MIT, 378 stars, 34 forks) packages OKF
+authoring/validation/visualization as a Claude Code plugin + agent skills +
+GitHub Action + MCP server, and dogfoods itself (its own docs are written in
+OKF format, validated in CI). A smaller curated list, `linyiru/awesome-okf`,
+also exists. Together these are early evidence of an ecosystem forming
+independent of Google Cloud — worth watching, not yet adopted here.

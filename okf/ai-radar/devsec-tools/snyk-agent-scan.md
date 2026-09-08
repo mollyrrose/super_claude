@@ -3,7 +3,7 @@ type: tool
 title: Snyk agent-scan (formerly invariantlabs-ai/mcp-scan)
 description: Scans agents, MCP servers, and Claude-style skills on disk for prompt injection, tool poisoning, and credential mishandling.
 tags: [mcp, security, scanner, skills, snyk, prompt-injection]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-09-08T00:00:00Z
 resource: https://github.com/snyk/agent-scan
 status: current
 supersedes: []
@@ -34,3 +34,9 @@ releases + SBOM, a visible security policy. Apache-2.0. No dual-use concerns
 - `adoption: awareness-candidate` — not yet run against this repo's own
   skill/MCP inventory; that would be a deliberate follow-up, not an
   automatic change from this scan.
+
+# Update (2026-09-08 scan): re-verified, growth continuing
+
+Re-checked directly: 3,016 stars / 269 forks / 13 open issues, pushed the
+same day as this scan (2026-09-08) — official Snyk org account, strong
+trajectory, actively shipping.

@@ -3,7 +3,7 @@ type: tool
 title: OpenAI Codex — competing terminal coding agent harness
 description: OpenAI's lightweight terminal coding agent (Rust core) with VS Code/Cursor/Windsurf integrations; largest single weekly star gain across GitHub trending this sweep.
 tags: [openai, agent-harness, competing-product]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-09-08T00:00:00Z
 resource: https://github.com/openai/codex
 status: current
 supersedes: []
@@ -30,3 +30,18 @@ attribution is inferred, not confirmed.
 Direct competing product to Claude Code — awareness entry, alongside
 [deepseek-harness](/harness/deepseek-harness.md), for tracking what
 competing agent harnesses are shipping. No action implied.
+
+# Update (2026-09-08 scan): GPT-6 Astra default, plugin tiers, delegation controls
+
+[gpt-6-astra](/models/gpt-6-astra.md) became Codex's recommended default
+model on 2026-09-03 (bundled as default in CLI v0.153.4). `/plugins` now
+sorts remote plugins into "OpenAI Curated," "Workspace," and "Shared with
+me," with some turns proactively recommending/installing a relevant
+plugin. App-server clients can set multi-agent delegation to disabled /
+explicit-request-only / proactive at thread or turn granularity.
+Configurable rollout token budgets track usage per agent thread, warn as
+they deplete, and abort turns on exhaustion. An indexed web-search mode
+restricts direct page fetches to server-approved URLs. Repo re-verified:
+Apache-2.0, 122.5k stars, 10,428 commits on main, 5,000+ open issues, 170
+open PRs — clearly active, though the exact v0.153.4 tag/date was not
+independently confirmed from inside the repo itself.

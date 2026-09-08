@@ -3,7 +3,7 @@ type: tool
 title: npm-shai-hulud-scanner (Drasrax)
 description: Detects npm/PyPI packages compromised by the Shai-Hulud worm family — detailed detection logic, but thin adoption signals.
 tags: [npm, supply-chain, scanner, unverified]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-09-08T00:00:00Z
 resource: https://github.com/Drasrax/npm-shai-hulud-scanner
 status: unverified
 supersedes: []
@@ -43,3 +43,9 @@ proper review (ideally a skillspector-gate scan) before any adoption.
 
 - `status: unverified`, `adoption: do-not-recommend-pending-review` —
   `/radar-check` must never surface this as an adopt-it recommendation.
+
+# Update (2026-09-08 scan): unchanged
+
+Re-checked: `Drasrax/npm-shai-hulud-scanner` — MIT, 15 stars / 4 forks / 0
+issues, last push 2026-08-07. Single maintainer, thin adoption, no notable
+change since the last sweep. Status unchanged.

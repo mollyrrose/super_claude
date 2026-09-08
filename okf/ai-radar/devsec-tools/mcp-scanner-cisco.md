@@ -3,7 +3,7 @@ type: tool
 title: Cisco mcp-scanner
 description: Vendor-backed scanner for MCP servers/tools — threat inspection via YARA rules, LLM-based analysis, and a sandboxed package scanner.
 tags: [mcp, security, scanner, supply-chain, cisco]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-09-08T00:00:00Z
 resource: https://github.com/cisco-ai-defense/mcp-scanner
 status: current
 supersedes: []
@@ -39,3 +39,13 @@ rather than fully independently audited.
   toolchain, not yet formally evaluated against
   [appsec-toolchain](/devsec-tools/appsec-toolchain.md)'s
   `destructive: no` bar. Needs a deliberate look before wiring in.
+
+# Update (2026-09-08 scan): re-verified, org-owned and healthy
+
+Re-checked directly: `cisco-ai-defense/mcp-scanner` is alive, org-owned
+(Cisco AI Defense, not a personal fork), Apache-2.0, 1,066 stars / 135
+forks / 60 open issues, pushed 2026-09-04, updated 2026-09-07. Homepage
+links to an official Cisco engineering blog post, corroborating the vendor
+identity. Upgraded confidence: this entry's earlier "not independently
+audited beyond release-cadence" caveat is now backed by direct star/fork/
+license/activity confirmation.

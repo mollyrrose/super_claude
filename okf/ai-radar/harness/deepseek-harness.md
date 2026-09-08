@@ -3,7 +3,7 @@ type: tool
 title: DeepSeek Harness (dsh)
 description: DeepSeek's open-source, plugin-only TypeScript agent harness — a competing architecture to Claude Code's hooks/skills/MCP model.
 tags: [deepseek, agent-harness, open-source, competing-architecture]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-09-08T00:00:00Z
 resource: https://github.com/deepseek-ai/deepseek-harness
 status: current
 supersedes: []
@@ -43,3 +43,16 @@ A genuine competing agent-harness architecture worth tracking for design
 ideas (plugin-only core vs. fixed-core-plus-hooks), not a recommendation to
 switch off Claude Code. `adoption: awareness-only` — this is a landscape
 entry, not a "speak up" supersession.
+
+# Update (2026-09-08 scan): explosive growth, self-disclosed audit gap
+
+Grew to roughly 210-216k stars by early September (one of the
+fastest-growing agent-harness repos this year). Recent updates: an explicit
+notice that the project has **not** been security-audited, migration from a
+legacy `ApiProxy` interface to an `@Remote` gateway, improved shell guidance
+in model prompts, and a one-time-token requirement hardening the local web
+UI. Claude Code and Codex can reportedly be installed as "Profile Bundles"
+and run as subagents inside a DeepSeek-orchestrated workflow. Re-verified
+directly via GitHub: MIT, 216k stars, 15,659 commits on master — the
+"not-security-audited" self-disclosure is a good-faith signal worth noting
+alongside the growth rate.

@@ -3,7 +3,7 @@ type: pattern
 title: Appsec / vuln-discovery toolchain matrix (non-destructive)
 description: Kill-chain phase to best-in-class open-source tool, each flagged destructive yes/no, for the non-destructive /pentest engine.
 tags: [pentest, appsec, sast, dast, sca, toolchain, non-destructive]
-timestamp: 2026-06-28T00:00:00Z
+timestamp: 2026-09-08T00:00:00Z
 resource: https://owasp.org/www-project-web-security-testing-guide/
 status: current
 supersedes: []
@@ -59,10 +59,15 @@ Order phases per OWASP WSTG (web) and PTES: orient -> static (SAST/SCA/secrets/I
 -> recon/enumeration -> non-destructive vuln discovery -> report -> auto-fix +
 re-verify. NIST 800-115 for assessment rigor. Map findings to CWE/OWASP Top 10.
 
-# Lint note (2026-08-27 scan)
+# Lint note (2026-09-08 scan)
 
-Entry is ~60 days old against this topic's ~30-day freshness window. Matrix
-itself (tool selection per phase) is not re-verified this pass; candidate
-additions to consider next time: [mcp-scanner-cisco](/devsec-tools/mcp-scanner-cisco.md)
-and [snyk-agent-scan](/devsec-tools/snyk-agent-scan.md) (MCP-security phase,
-not yet in the matrix above).
+Still no single canonical repo/URL to re-verify this matrix against (it's a
+curated document, not a tracked project) — genuinely re-checking "is this
+still the best tool per phase" needs a dedicated pass, not a sweep-time
+lookup. Partial re-verification done instead: the two MCP-security
+candidates flagged last scan,
+[mcp-scanner-cisco](/devsec-tools/mcp-scanner-cisco.md) and
+[snyk-agent-scan](/devsec-tools/snyk-agent-scan.md), were both re-confirmed
+`current` and actively maintained this scan (see their entries) and remain
+candidates for an MCP-security phase not yet in the matrix above. Matrix
+substance (tool selection per existing phase) unchanged.

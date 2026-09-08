@@ -9,6 +9,73 @@ timestamp: 2026-06-28T00:00:00Z
 
 Newest first. Each line: date — what changed.
 
+- 2026-09-08 — Weekly sweep, all 6 topics + GitHub trending (daily/weekly,
+  overall + Python + TypeScript views), run as an isolated cloud sandbox
+  session (no local disk persists, so this sweep commits+pushes directly,
+  unlike the local variant which stays disk-only). 21 new entries, 18
+  existing entries refreshed/merged with new detail, 0 lint issues found
+  after fixes.
+  **models** (6 new): gpt-6-astra (supersedes gpt-5-6, OpenAI's new
+  flagship), claude-fable-mythos-5-1 (Anthropic's separate frontier tier
+  above Opus, resolved against claude-opus-5's existing "approaching Fable"
+  language rather than treated as a lineage conflict), grok-4-6 (first xAI
+  entry), meta-muse-glimmer (first Meta entry, unverified), deepseek-v4-pro
+  (first DeepSeek model entry, unverified); merged GLM-5.3-Flash detail into
+  the existing glm-5-3 entry instead of duplicating (it was already
+  flagged there last scan).
+  **cognition** (5 new): memory-portability-model-upgrade-2026 (controlled
+  study validating this project's own graph-over-notes memory design),
+  timem-temporal-hierarchical-memory (5-level memory tree, ACL 2026
+  Findings), zenbrain-7layer-memory, lycheememory-v2-segment-consolidation,
+  portable-agent-memory-protocol (all three unverified/small-install-base);
+  refreshed hermes-agent-nousresearch's previously-flagged "implausible"
+  star count — now corroborated by a second independent sweep.
+  **knowledge** (1 new): maximem-synap (unverified vendor benchmark, same
+  pattern as mem0-agent-memory-benchmark-2026); merged updates into
+  open-knowledge-format (spec moved to its own repo, first third-party
+  tooling), cognee (5 point releases), graphiti-zep (v0.30.1).
+  **agent-tooling** (5 new): openclaw (389k-star harness, repositioning as
+  enterprise infra), hydrafusion (GitHub Copilot CLI's multi-model
+  orchestrator, unverified), aden-hive (self-organizing agent topology,
+  unverified), ruflo-swarm-harness (already installed in this project,
+  corroborated), trending-skillpack-star-inflation-pattern (one
+  consolidated caution entry covering 5-6 trending "skill pack" repos with
+  suspect star-to-commit ratios, rather than 5 separate unverified stubs).
+  **devsec-tools** (3 new): api-relay-audit, malskanner (both unverified),
+  deepteam-redteam (current, fills the red-team/attack-simulation gap next
+  to the existing scanners); re-verified and refreshed mcp-scanner-cisco,
+  snyk-agent-scan, ai-infra-guard (v4.5.2/v4.6.0), npm-shai-hulud-scanner
+  (unchanged), hexstrike-ai (grown to 11.6k stars), appsec-toolchain
+  (partial re-verification, no canonical single URL to check against).
+  **harness** (4 new): claude-code-skill-doctor, cursor-self-hosted-machines,
+  context-mode-mcp, ecc-agent-harness (the ECC plugin already installed in
+  this project — functionality corroborated, star count unverified); merged
+  updates into claude-code-aug2026-updates (new hook events,
+  managedMcpServers), openai-codex (GPT-6 Astra default), deepseek-harness
+  (216k stars, self-disclosed audit gap), apache-maka (still no ASF
+  release), mcp-2026-07-28-spec (2026-08-22 roadmap).
+  **Lint pass**: checked all 74 internal cross-links (0 broken beyond one
+  pre-existing illustrative example in README.md), checked all new entries
+  for orphan status (0 found — each linked from its topic index), checked
+  frontmatter (`type` present in all 65 non-reserved files; `status` values
+  all one of current/superseded/unverified), checked freshness windows (no
+  `current` entry past its topic's staleness window found this pass beyond
+  what was already re-verified above).
+  **Deferred/skipped, stated honestly**: no YouTube or arXiv-API tooling was
+  available in this sandbox (WebFetch to arxiv.org and huggingface.co was
+  blocked by the egress proxy across multiple research passes — cognition
+  and knowledge findings above were reconstructed from search-engine
+  snippets, not primary PDF/HTML text, where noted in-entry); several
+  official first-party sources were also egress-blocked this pass
+  (anthropic.com, openai.com/developers.openai.com, mem0.ai, maximem.ai,
+  geminicli.com, github.blog, venturebeat.com, infoq.com, marktechpost.com,
+  news.ycombinator.com) — those entries rely on independent secondary-source
+  corroboration instead and are marked accordingly; did not deep-dive
+  several lower-priority trending repos (MagiCrew, several "diagram
+  generation skill" repos, sglang, timesfm, heretic) — logged in the
+  trending research but not written up as bundle entries this pass; did not
+  independently reproduce any vendor-reported benchmark number cited above.
+
 - 2026-08-27 (part 2) — Follow-up sweep: the routine's own prompt was updated
   (`qRem` step 8, after part 1 below already ran) to add a **cognition**
   topic and a GitHub-trending step; this pass covers exactly that delta

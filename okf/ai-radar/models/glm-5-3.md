@@ -3,7 +3,7 @@ type: model
 title: GLM-5.3 (Z.ai)
 description: Zhipu/Z.ai's GLM-5.3 — a post-training-only upgrade over the GLM-5.2 base, big gains on long-horizon coding tasks.
 tags: [glm, zhipu, z.ai, coding, open-weights]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-09-08T00:00:00Z
 resource: https://www.marktechpost.com/2026/08/14/z-ai-ships-glm-5-3-without-retraining-the-base-model-better-at-complex-coding-and-long-horizon-tasks/
 status: current
 supersedes: []
@@ -40,3 +40,19 @@ independently verified against an official Z.ai model card.
 
 - Confirm open-weight availability and license terms once released
   (~2026-08-28) at the next scan.
+
+# Update (2026-09-08 scan): GLM-5.3-Flash unmasked and detailed
+
+GLM-5.3-Flash — first noted above as imminent — surfaced publicly in late
+August as a mystery "Ox Alpha" stealth model on OpenRouter/LMArena, then was
+attributed to Z.ai in early September. It is a 320B-total/18B-active MoE
+model with hybrid linear+sparse attention, native multimodal input (text,
+image, video, file), and a context window reported inconsistently across
+sources as either 1,048,576 or 1,310,720 tokens (unresolved — check Z.ai's
+own docs before citing a hard number) with up to 131,072 output tokens.
+Z.ai list pricing: $0.15/M input, $0.03/M cached input, $0.50/M output, no
+context-length tiering. One source (codersera.com) describes it as
+MIT-licensed open weight — not independently confirmed. Positioned for
+efficient coding and long-horizon agent workloads. Sourced from OpenRouter,
+Artificial Analysis, DataCamp, LLM Gateway, and llm-stats.com (Z.ai's own
+blog was not directly fetched this pass).

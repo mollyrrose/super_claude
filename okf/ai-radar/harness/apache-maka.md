@@ -3,7 +3,7 @@ type: tool
 title: Apache Maka (incubating) — local-first AI agent workspace
 description: Apache Incubator project logging model interactions, tool calls, and decisions as immutable local records; ships Desktop/CLI/eval interfaces. No official release yet.
 tags: [apache, agent-workspace, local-first, incubating]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-09-08T00:00:00Z
 resource: https://github.com/apache/maka
 status: current
 supersedes: []
@@ -31,3 +31,14 @@ Auditable, local-first agent-execution logging is directly relevant to this
 project's own hook-based observability approach (semgrep post-edit hook,
 qRev counters, curator queue). Worth re-checking once it ships a first
 release; not adoptable yet.
+
+# Update (2026-09-08 scan): still no ASF release, but near-daily nightlies
+
+As of this scan the most recent builds are `v0.2.0-dev.23.20260906` through
+`.16.20260903` — near-daily nightly snapshots through early September, each
+still explicitly disclaiming "this is not an Apache Release and has not
+been approved by an ASF release vote." Earlier, `0.1.11` (2026-08-18) added
+a promoted shared-authority Runtime Host and a brokered Windows
+AppContainer sandbox. Status unchanged (`too-early-no-release-yet`), but
+development velocity is high — worth a closer look once a formal release
+lands.

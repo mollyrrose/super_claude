@@ -3,7 +3,7 @@ type: tool
 title: Hermes Agent (NousResearch) — self-improving agent with closed learning loop
 description: Open-source agent that creates/self-improves its own skills, writes agent-curated facts to MEMORY.md, and does FTS5 cross-session recall. Naming collision with this repo's own hermes-agent/ directory.
 tags: [agent-memory, self-improving, nousresearch, naming-collision]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-09-08T00:00:00Z
 resource: https://github.com/nousresearch/hermes-agent
 status: current
 supersedes: []
@@ -23,13 +23,12 @@ GPU clusters.
 # Repo / source check
 
 MIT license, 25,868 commits, 5k+ open issues (large, active community).
-**Flag:** WebFetch reported 237.3k stars for this repo, which is implausibly
-high for this project's apparent profile — likely a scraping artifact
-(possibly a wrong badge/number picked up from the page). Treat the star
-count specifically as unverified; the architecture description is
-corroborated across multiple independent write-ups (Substack, Medium,
-aibuilderclub.com), so the project's existence and design are credible even
-though the popularity metric is not confirmed.
+**Update (2026-09-08):** a second, independent sweep (GitHub-trending
+tracking) separately fetched this repo and reported 243k stars / 50k forks
+/ 32,764 commits — consistent with the 237.3k figure flagged as an
+implausible scraping artifact last scan. Two independent fetches now agree
+closely; downgrading the star-count concern from "likely artifact" to
+"plausible, but still only WebFetch-summarized, not GitHub-API-confirmed."
 
 # Why this is in the radar
 

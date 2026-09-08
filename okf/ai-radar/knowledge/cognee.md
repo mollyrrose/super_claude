@@ -3,7 +3,7 @@ type: tool
 title: Cognee — graph-native agent memory framework
 description: Graph-native memory framework for agents; large, active repo. Funding/deployment claims unverified.
 tags: [knowledge-graph, agent-memory, open-source]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-09-08T00:00:00Z
 resource: https://github.com/topoteretes/cognee
 status: current
 supersedes: []
@@ -37,3 +37,17 @@ per-dataset isolation). Cross-linked from the new
 [cognition](/cognition/index.md) topic: the multi-tenant, dataset-isolated
 design is built for a shared "community-brain" use case specifically, more
 so than a single personal memory layer — heavier infra than needed here.
+
+# Update (2026-09-08 scan): active weekly release cadence
+
+Five point releases shipped 2026-08-21 through 2026-09-04: v1.5.1/v1.5.2
+(stability/search), v1.5.3 (search relevance + ingestion resume support),
+v1.5.3.dev1 (Linear/GitHub connectors, a "doctor" config-check CLI, hybrid
+search now default), v1.5.4 (Docker/dlt packaging, API accepts raw
+strings/repo URLs directly, API-token log redaction, local file-root access
+disabled by default for security). Cognee's own blog also highlights
+graph-aware embeddings (graph signals boosting semantic search) and
+role-based access control across Kùzu/LanceDB backends as paid-plan
+features. This is the most concretely active project in the whole
+"knowledge" bucket this cycle — a real shipping cadence, not just a paper
+or announcement.

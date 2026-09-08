@@ -3,7 +3,7 @@ type: tool
 title: HexStrike AI
 description: MCP server + autonomous offensive agents orchestrating 150+ pentest tools against LIVE targets — offensive, dynamic, high-caution.
 tags: [offensive, pentest, red-team, mcp, ctf, awareness, high-caution]
-timestamp: 2026-06-28T00:00:00Z
+timestamp: 2026-09-08T00:00:00Z
 resource: https://github.com/0x4m4/hexstrike-ai
 status: current
 supersedes: []
@@ -51,8 +51,13 @@ Two reasons, both awareness — NOT a recommendation to wire it into everyday fl
 "there is something better, adopt it" gate flag; it is an offensive capability, not
 a dependency upgrade.
 
-# Lint note (2026-08-27 scan)
+# Update (2026-09-08 scan): re-verified, adoption scale grown
 
-Entry is ~60 days old against this topic's ~30-day freshness window. Flagged
-needing re-verification (repo activity, star/issue trajectory, any new
-incidents) at the next scan — content not re-checked this pass.
+Re-checked directly: `0x4m4/hexstrike-ai` now 11,664 stars / 2,412 forks /
+127 open issues, pushed 2026-08-03, updated 2026-09-08 — one of the most-
+forked offensive-MCP frameworks tracked in this bundle. Multiple
+copycat/mirror repos exist (not the original); the canonical repo stays
+`0x4m4/hexstrike-ai`. Also separately confirmed via GitHub trending: v6.0
+release, with a v7.0 roadmap (250+ tools, containerized deployment).
+`adoption: do-not-auto-recommend` unchanged — the caution reasoning above
+still applies at this larger scale.

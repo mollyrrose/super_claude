@@ -3,7 +3,7 @@ type: pattern
 title: Claude Code — August 2026 harness updates (v2.1.232-2.1.247)
 description: Subagent forking on by default, cross-session messaging, a rolling MCP/hook reliability pass, and the new SendFeedback tool.
 tags: [claude-code, hooks, mcp, subagents, changelog]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-09-08T00:00:00Z
 resource: https://code.claude.com/docs/en/changelog
 status: current
 supersedes: []
@@ -57,3 +57,21 @@ pass; `claude.com`'s blog was not (egress-proxy block in this sandbox).
 - No action taken on this entry beyond recording it — evaluating whether to
   adopt cross-session `@name` messaging alongside `coord.py` is a separate,
   deliberate decision, not an automatic radar "speak up".
+
+# Update (2026-09-08 scan): more hook events, org-wide managed MCP servers
+
+Further releases through v2.1.263 (confirmed nothing newer as of this
+scan): v2.1.248 added per-agent `experimental.cacheTtl` frontmatter for
+per-agent prompt-cache control. v2.1.251 (2026-08-28) added
+`PreModelSwitch`/`PostModelSwitch` hook events (can block/confirm/annotate a
+model switch) and enriched `SessionStart` resume hooks with
+session-staleness and estimated re-cache-cost data. v2.1.259 (2026-09-02)
+added a `managedMcpServers` setting so orgs can push HTTP/SSE MCP servers to
+every user (command-based entries skipped for safety) and tightened
+`allowedMcpServers` semantics. Related fixes: MCP tool-call interrupt
+handling in headless/remote sessions, MCP arguments sent as raw JSON
+strings for empty-schema params, nested background-subagent results not
+persisting into the parent transcript, and a symlink-swap bug that let file
+tools escape the approved working directory after permission checks
+passed. Also see [claude-code-skill-doctor](/harness/claude-code-skill-doctor.md)
+(v2.1.261) for the new skill-auditing command from the same window.

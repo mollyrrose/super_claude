@@ -3,9 +3,9 @@ type: model
 title: GPT-5.6 (Luna / Sol)
 description: OpenAI's current GPT-5.6 family — Luna (free/Go default) and Sol (Plus/Pro), plus a previewed Ultrafast mode.
 tags: [openai, gpt, chatgpt]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-09-08T00:00:00Z
 resource: https://help.openai.com/en/articles/9624314-model-release-notes
-status: current
+status: superseded
 supersedes: []
 ---
 
@@ -33,5 +33,5 @@ before being relied on for a decision.
 
 # Notes
 
-- OpenAI's next family beyond Sol/Terra/Luna (rumored codename "Astra") is
-  in development/preview only as of this scan — not released, not added here.
+- Superseded 2026-09-03/04 by [gpt-6-astra](/models/gpt-6-astra.md), the
+  "Astra" family this entry previously flagged as in-development.

@@ -3,7 +3,7 @@ type: tool
 title: Graphiti (Zep) — temporal knowledge graph for agent memory
 description: Bi-temporal fact tracking (event time vs. ingest time) as the differentiator over flat vector memory; cited at ICLR 2026's MemAgents workshop.
 tags: [knowledge-graph, agent-memory, temporal, zep]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-09-08T00:00:00Z
 resource: https://github.com/getzep/graphiti
 status: current
 supersedes: []
@@ -43,3 +43,14 @@ linked from the new [cognition](/cognition/index.md) topic: the bi-temporal
 edge model is a genuine upgrade path over this project's own
 `graphifyy`-based memgraph, which does not currently track validity
 intervals per edge.
+
+# Update (2026-09-08 scan): v0.30.1 released
+
+v0.30.1 shipped 2026-09-01, fixing a bug where queries ignored a configured
+non-default Neo4j database (affects self-hosted Neo4j Enterprise
+multi-database setups), plus assorted search fixes. Follows v0.29.3
+(2026-07-27, FalkorDB optimizations). Routine maintenance, not an
+architecture change — confirms the project is still actively maintained.
+Version/date history cross-checked via PyPI release history (more reliable
+in this pass than the GitHub releases page, which returned inconsistent
+dates on fetch).
