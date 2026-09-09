@@ -60,6 +60,9 @@ powershell -File <repo-root>\scripts\backup_claude_state.ps1
    for `/qRev`'s and `/rev`'s Phase A deterministic gate; see "Required tool:
    semgrep" below. Without it, Phase A logs a coverage gap and skips straight to
    the agent fleet.
+   Also install the video-analysis pair (`python -m pip install --user
+   scenedetect opencv-python av`) if the machine will do video work; see
+   "Video analysis" below.
 2. Clone this repo **anywhere** (no specific drive needed — no fixed drive letter
    is required). Restore fills `[REPO]` from the clone's own location and `[PY]`
    from the Python it finds, so the layout is portable.
@@ -129,6 +132,56 @@ already-open Claude Code window).
 Per the standing "keep semgrep on the latest release" policy, upgrade with the
 same command above whenever `/qRev` or `/rev` reports semgrep is behind — no
 need to ask first.
+
+## Video analysis: PySceneDetect + OpenCV (+ av)
+
+Frame-level video analysis. Needed because the setup could already *generate*
+and *cut* video (ffmpeg, Remotion, `ecc:video-editing`) but had no per-frame
+quality or motion measurement at all - no OpenCV, no PySceneDetect, no
+Laplacian/blur scoring, no optical flow anywhere.
+
+What each one buys:
+
+- **PySceneDetect** - scene boundaries, sharper than ffmpeg's `scdet`. Measured
+  on a 3-shot test clip: PySceneDetect found both cuts (2.0s, 4.0s); ffmpeg
+  `select='gt(scene,0.3)'` found only one (4.0s).
+- **opencv-python** - per-frame sharpness (Laplacian variance), motion vectors,
+  and everything else frame-level.
+- **av** (PyAV) - alternate decode backend for PySceneDetect
+  (`open_video(path, backend="pyav")`), and the fallback when OpenCV's decoder
+  chokes on a file (see the gotcha below).
+
+Install (same interpreter Claude Code's hooks use - `$env:CLAUDE_PYTHON` or the
+one on PATH; do NOT hardcode a version path):
+```powershell
+python -m pip install --user scenedetect opencv-python av
+```
+
+Verify:
+```powershell
+python -c "import scenedetect, cv2, av; print(scenedetect.__version__, cv2.__version__)"
+```
+
+**Do NOT install these into `ai_video/comfyui/.venv`.** That venv is Python
+3.13, built by uv, already ships its own `cv2`, and a long-lived ComfyUI server
+runs out of it (`scripts/start_comfyui_bg.ps1`). Installing there risks the
+Windows `WinError 5` file-lock / half-upgraded-venv failure documented in the
+`hermes-auto-shared-venv-server-install-conflict` skill - which names
+`opencv-python` as its example. The user-site install above is fully separate;
+verified that ComfyUI's venv keeps its own `cv2` untouched.
+
+**Gotcha found while verifying (2026-09-08):** OpenCV's `VideoCapture`
+**segfaults** partway through MP4s produced by `ffmpeg -f concat -c copy` - it
+dies at the segment boundary, taking the whole Python process with it (exit
+139, no traceback). Same crash reaches PySceneDetect when it uses the OpenCV
+backend on such a file. Two fixes, both verified:
+
+- re-encode instead of stream-copying (`-c:v libx264 -pix_fmt yuv420p`), or
+- use `open_video(path, backend="pyav")`, which decodes the concatenated file
+  correctly.
+
+Neither package is at fault, and neither is Python 3.14 - the input file is.
+Worth knowing before debugging a "broken" install for an hour.
 
 ## External skills (bundled in repo, sources below)
 
