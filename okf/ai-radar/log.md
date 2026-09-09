@@ -75,6 +75,16 @@ Newest first. Each line: date — what changed.
   generation skill" repos, sglang, timesfm, heretic) — logged in the
   trending research but not written up as bundle entries this pass; did not
   independently reproduce any vendor-reported benchmark number cited above.
+- 2026-09-08 — Added models/k2-horizon-mova-36b-a4b (EVALUATED-not-adopted).
+  Question asked: is its speed - not its knowledge - useful anywhere here?
+  No. Speed claim has zero published measurement; the model is reachable only
+  via the qPlan OpenAI-compatible critic slots (where latency is irrelevant and
+  a strong different-family model is wanted instead), and unreachable in the
+  latency-dominated Task fleets (qRev, focus-group) which are bound to the
+  session provider. Even via a translating proxy it would be slower (weak
+  tool-calling trips qRev's failed-dispatch tripwire) and costlier
+  (subscription -> metered). Filter recorded for any future test: separate
+  model speed from host speed (Cerebras).
 
 - 2026-08-27 (part 2) — Follow-up sweep: the routine's own prompt was updated
   (`qRem` step 8, after part 1 below already ran) to add a **cognition**

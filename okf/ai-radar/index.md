@@ -42,3 +42,4 @@ for the format and `log.md` for the ingest timeline.
 - [cognition/memanto](/cognition/memanto.md) — typed semantic memory, ships Claude Code integration
 - [harness/openai-codex](/harness/openai-codex.md) — competing terminal coding agent, now defaults to GPT-6 Astra
 - [devsec-tools/ai-infra-guard](/devsec-tools/ai-infra-guard.md) — red-team platform for agents/MCP/skills
+- [models/k2-horizon-mova-36b-a4b](/models/k2-horizon-mova-36b-a4b.md) — evaluated for a speed role, not adopted

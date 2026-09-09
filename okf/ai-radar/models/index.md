@@ -24,3 +24,4 @@ Releases, price, limits, capability changes for Claude / OpenAI / GLM and peers.
 - [meta-muse-glimmer](/models/meta-muse-glimmer.md) — Meta's first open-weight release in this window; 30B, Apache-2.0, on-device agentic; unverified
 - [deepseek-v4-pro](/models/deepseek-v4-pro.md) — first tracked DeepSeek model entry; agentic/tool-use, GA'd August 2026; unverified
 - [marin](/models/marin.md) — open end-to-end foundation-model training platform (Stanford CRFM); not applicable here, awareness only
+- [k2-horizon-mova-36b-a4b](/models/k2-horizon-mova-36b-a4b.md) — sparse MoVA model; evaluated for speed, not adopted (unmeasured speed claim, unreachable where speed matters)
