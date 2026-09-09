@@ -170,7 +170,7 @@ claude mcp list
 # Should show: comfyui-local, sora-cloud
 
 # 3. Python parses both MCP servers
-& "C:/Python313/python.exe" -c "import ast; ast.parse(open(r'D:/projects/super_claude/hermes-agent/claude_code_integration/mcp_servers/comfyui_mcp.py', encoding='utf-8').read()); print('ok')"
+& "C:/Python314/python.exe" -c "import ast; ast.parse(open(r'D:/projects/super_claude/hermes-agent/claude_code_integration/mcp_servers/comfyui_mcp.py', encoding='utf-8').read()); print('ok')"
 
 # 4. Test generation (after restarting Claude Code so it loads the MCPs)
 #    Ask Claude: "use comfyui-local to generate a 5-second clip of a misty forest"

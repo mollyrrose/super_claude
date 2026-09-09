@@ -50,7 +50,7 @@ if (Test-Path $src) {
   if (-not $py) { $py = (Get-Command python  -ErrorAction SilentlyContinue).Source }
   if (-not $py) { $py = (Get-Command python3 -ErrorAction SilentlyContinue).Source }
   if (-not $py) { $py = (Get-Command py      -ErrorAction SilentlyContinue).Source }
-  if (-not $py) { $py = 'C:\Python313\python.exe'; Write-Warning "no Python on PATH; [PY] defaulted to $py — install Python or set `$env:CLAUDE_PYTHON and re-run." }
+  if (-not $py) { $py = 'C:\Python314\python.exe'; Write-Warning "no Python on PATH; [PY] defaulted to $py — install Python or set `$env:CLAUDE_PYTHON and re-run." }
   if ($raw -match '\[PY\]') { Write-Host "[ok] [PY] -> $py" }
   $raw = $raw.Replace('[PY]', $py.Replace('\', '\\'))
 

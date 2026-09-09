@@ -431,7 +431,7 @@ After the closing summary is written (and BEFORE you hand the chat back to
 the user), call the curator-emit helper with the workdir path:
 
 ```bash
-"C:\Python313\python.exe" "C:\Users\[USER]\.claude\scripts\qplan_curate_emit.py" "<absolute workdir path>"
+"C:\Python314\python.exe" "C:\Users\[USER]\.claude\scripts\qplan_curate_emit.py" "<absolute workdir path>"
 ```
 
 The helper distills the highest-signal parts of this run's `state.json` +

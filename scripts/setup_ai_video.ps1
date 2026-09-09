@@ -46,7 +46,7 @@
     .\scripts\setup_ai_video.ps1 -Redetect
 
 .EXAMPLE
-    .\scripts\setup_ai_video.ps1 -Tier C -SystemPython C:\Python313\python.exe
+    .\scripts\setup_ai_video.ps1 -Tier C -SystemPython C:\Python314\python.exe
 #>
 [CmdletBinding()]
 param(
@@ -150,7 +150,7 @@ function Classify-Tier {
 function Resolve-SystemPython {
     if ($SystemPython -and (Test-Path $SystemPython)) { return $SystemPython }
     $candidates = @(
-        'C:\Python313\python.exe',
+        'C:\Python314\python.exe',
         'C:\Python312\python.exe',
         'C:\Python311\python.exe',
         'C:\Python310\python.exe'

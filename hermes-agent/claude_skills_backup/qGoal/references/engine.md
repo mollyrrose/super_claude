@@ -111,7 +111,7 @@ it terminal.
 When the run MERGES a winner into trunk, or PRUNES a whole strategy branch, log it:
 - Append to `<project>/docs/decisions/log.md` (newest on top), and
 - Pipe the same fields as JSON to the decision stream:
-  `"C:\Python313\python.exe" "D:\Projects\super_claude\hermes-agent\claude_code_integration\decision_log_cli.py"`
+  `"C:\Python314\python.exe" "D:\Projects\super_claude\hermes-agent\claude_code_integration\decision_log_cli.py"`
   with `revisit_if` like "B_test regresses below trunk" or "requirement changes".
 Routine per-step / per-cycle iteration is NOT logged — only merges and
 strategy-level prunes.

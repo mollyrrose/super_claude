@@ -127,7 +127,7 @@ rm -f graphify-out/.graphify_chunk_01.json graphify-out/.graphify_cached.json
 ```
 
 Note: `graphify-out/.graphify_python` contains the full path to the Python
-executable (e.g. `C:\Python313\python.exe`). The double-quotes around the
+executable (e.g. `C:\Python314\python.exe`). The double-quotes around the
 command substitution (`"$(cat ...)"`) are required when the path contains spaces.
 Step 3.3 depends on Step 3.1 having written `.graphify_detect.json`; if Step 3.1
 was skipped or failed, Step 3.3 will also fail -- that is expected and handled by
