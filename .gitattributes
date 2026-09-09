@@ -1,0 +1,5 @@
+# Binary assets - never line-ending-normalise these.
+*.rnnn binary
+*.mp4  binary
+*.mov  binary
+*.wav  binary
