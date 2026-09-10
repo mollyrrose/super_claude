@@ -42,8 +42,20 @@ rules in `CLAUDE.md`. Editing here changes how every Claude Code session behaves
   `decision_log_cli.py`, `mark_drained_cli.py`.
 - `hermes-agent/claude_skills_backup/` — backup of installed skills, including the
   `q*` commands (qPlan/qRev/qMin/qClose/qRem/qUpd/qDo/qContent), the vendored
-  `arbor-*` engine, `ponytail*`, `improve`, `drawio-skill`, `skillspector-gate`.
+  `arbor-*` engine, `ponytail*`, `improve`, `drawio-skill`, `skillspector-gate`,
+  and an 11-skill subset vendored from `K-Dense-AI/scientific-agent-skills` (MIT):
+  `statistical-analysis`, `statistical-power`, `experimental-design`,
+  `exploratory-data-analysis`, `uncertainty-and-units`, `scientific-critical-thinking`,
+  `peer-review`, `polars`, `networkx`, `markdown-mermaid-writing`,
+  `citation-management`. Domain-agnostic only — the other 152 skills in that repo
+  are bio/chem/lab specific and were deliberately left out to keep the always-on
+  skill index small. Each vendored copy has the upstream "Citing Scientific Agent
+  Skills" block removed (it instructed the agent to insert K-Dense's arXiv paper
+  into the user's own deliverables).
 - `~/.claude/tools/skillspector/` — the security scanner (not in this repo).
+  Reinstall with `uv venv .venv --python 3.12` + `uv pip install "skillspector @
+  git+https://github.com/NVIDIA/skillspector.git"` in that directory. Python 3.12,
+  not 3.14: `yara-python` has no 3.14 wheel and would need MSVC build tools.
 - `home_dotclaude/` — sanitized mirror of the live `~/.claude/` config that is
   worth version-tracking: `CLAUDE.md` and `settings.json`. The live files stay
   outside the repo; these are copies kept in sync by hand when the config
