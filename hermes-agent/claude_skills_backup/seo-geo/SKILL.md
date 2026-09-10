@@ -233,6 +233,25 @@ See [references/platform-algorithms.md](./references/platform-algorithms.md) for
 - High **factual density** (data-rich content preferred)
 - Clear **structural clarity** (easy to extract)
 
+## Reporting discipline
+
+Adapted 2026-09-10 from `every-app/open-seo` `.agents/skills/seo-audit` (MIT). Apply to every audit or report this skill produces.
+
+1. **Verify before you report.** A crawler or API says a page has a missing canonical; fetch the live HTML and confirm it before it goes in the report. Report tool output as a claim, not as a finding.
+2. **Never invent a metric.** If the API returned no value, write `unknown`. Do not estimate search volume, difficulty, or traffic and present it as measured.
+3. **Cap the fix list at 5-10, ordered by impact.** A 40-item list gets ignored. Cut everything below the line.
+4. **Lead with one thing.** Open with the single highest-impact action for this week, derived from the data, not from generic best practice. If the site is already healthy, say so and suggest 3-5 low-difficulty keywords with a realistic shot at ranking.
+5. **Gloss the jargon inline.** "Canonical tag (tells Google which URL is the real one)". Assume the reader is not an SEO.
+6. **Methodology footer.** End with what was verified against live HTML, what came from the API, what was skipped, and why. Keep the two categories visually separate.
+7. **Calm tone.** No drama words, no urgency manufacturing, no filler.
+
+## Known gaps vs commercial suites
+
+Not implemented here, so say so rather than improvising:
+- **Local SEO / Google Business Profile** — no local SERP, GBP question, or map-pack tracking. DataForSEO exposes these endpoints; a `local_serp.py` script would close it.
+- **Search Console / GA4** — no first-party performance data, so striking-distance queries (positions 11-20) cannot be pulled. Ask the user to export from GSC if that matters.
+- **Persistent project state** — no per-domain audit history across sessions. Use the memory system if a domain is audited repeatedly.
+
 ## Skill Dependencies
 
 This skill works best with:

@@ -74,6 +74,67 @@ Often-empty phrases: it's worth noting, it's important to note, at the end of th
 
 **Formatting slop.** Emoji in headings, bold sprinkled mid-sentence for emphasis, bullet lists where two sentences of prose would read better.
 
+## More patterns to cut
+
+**False ranges.** "From X to Y" where X and Y sit on no real scale ("from innovation to implementation to cultural transformation"). If it is a list, list it.
+
+**Invented concept labels.** Coining a fake term for an ordinary observation ("the supervision paradox," "workload creep"). Describe the thing.
+
+**Narrator-from-a-distance.** "Nobody designed this," "People tend to," "This is why." Put the reader in the room or name the actor.
+
+**Historical analogy stacking.** "Apple didn't build Uber. Facebook didn't build Spotify..." Borrowed authority, no argument.
+
+**Patronizing analogies and false vulnerability.** "Think of it like a library." "I'll admit I got this wrong at first." Cut unless the admission is real and load-bearing.
+
+**Fractal summaries.** Telling the reader what you will say, saying it, then summarizing it. Say it once.
+
+**Meta-joiners.** "The rest of this essay," "In this section we'll explore." Delete.
+
+**Self-certifying language.** "The honest answer is," "to be genuinely clear." State the evidence or the limit instead of asserting your own honesty.
+
+**Lazy extremes.** "Every," "always," "never" doing vague work. Name the actual scope.
+
+**Tricolon abuse.** Three-item lists as a default rhythm. Two items usually read better.
+
+**The "serves as" dodge.** "Serves as," "stands as," "represents," "marks." Use "is."
+
+## Register
+
+Blog and newsletter: "you" beats "people," specifics beat abstractions.
+
+Technical and scientific: keep formality and domain terms. "Weighted interval score" is precision, not jargon. The problem is business buzzwords and AI vocabulary leaking in, not the field's own vocabulary.
+
+## Pre-delivery checklist
+
+- Passive voice? Find the actor, make them the subject.
+- Inanimate thing doing a human verb? Name the person.
+- "Here's what/this/that" throat-clearing? Cut to the point.
+- "Not X, it's Y"? State Y.
+- Self-posed question answered immediately? Fold into a statement.
+- Three consecutive sentences the same length? Break one.
+- Vague declarative ("the implications are significant")? Name the implication.
+- Trailing -ing clause pretending to analyze? Delete or make a real claim.
+- Same metaphor more than twice? Cut the repeats.
+- Bold-first bullets? Remove the bold leads.
+- Three-item list? Try two.
+
+## Scoring (only when the user asks for a score)
+
+Rate 1-10 on directness, rhythm, trust, authenticity, density. Below 35/50 means revise. Default Detect mode still does not score — name patterns and quote lines instead.
+
+## Reference catalogs
+
+Load these on demand for the full lists. Do not read them for a short draft.
+
+- `references/phrases.md` — throat-clearing openers, emphasis crutches, pedagogical hand-holding, business jargon, vague declaratives, vague attributions
+- `references/structures.md` — binary contrasts, negative listing, dramatic fragmentation, false agency, narrator-from-a-distance, false ranges, historical analogy stacking
+- `references/tropes.md` — full trope catalog by category (word choice, sentence structure, paragraph structure, tone, formatting, composition)
+- `references/examples.md` — before/after transformations
+
+Merged 2026-09-10 from `every-app/open-seo` `.agents/skills/deslop` (MIT, see `references/LICENSE.deslop`); `tropes.md` credits tropes.fyi by ossama.is.
+
+**One deliberate divergence from that source:** it bans the em dash outright. This setup allows the em dash in prose, because plain `--` collides with CLI flag syntax (global CLAUDE.md, "No decorative unicode"). Do not strip em dashes on that basis.
+
 ## Workflow
 
 1. Read the full draft before editing.
