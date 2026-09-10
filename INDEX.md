@@ -51,7 +51,15 @@ rules in `CLAUDE.md`. Editing here changes how every Claude Code session behaves
   are bio/chem/lab specific and were deliberately left out to keep the always-on
   skill index small. Each vendored copy has the upstream "Citing Scientific Agent
   Skills" block removed (it instructed the agent to insert K-Dense's arXiv paper
-  into the user's own deliverables).
+  into the user's own deliverables). Plus the three Anthropic document skills
+  `pdf`, `docx`, `xlsx` (Anthropic license, `LICENSE.txt` kept in each). `pdf`
+  comes from `anthropics/skills` upstream; `docx` and `xlsx` deliberately come
+  from the K-Dense vendored copy instead, because upstream
+  `scripts/office/soffice.py` still writes its LD_PRELOAD shim to the fixed path
+  `tempfile.gettempdir()/lo_socket_shim.so` and reuses whatever already sits
+  there without an owner or permission check. The K-Dense copy creates the shim
+  in a per-process `tempfile.mkdtemp()` directory. Inert on Windows (per-user
+  temp, LD_PRELOAD is Linux-only) but it matters under WSL or in a container.
 - `~/.claude/tools/skillspector/` — the security scanner (not in this repo).
   Reinstall with `uv venv .venv --python 3.12` + `uv pip install "skillspector @
   git+https://github.com/NVIDIA/skillspector.git"` in that directory. Python 3.12,
