@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Smoketest for run_codex_challenge.py — runs without Codex CLI (mock mode)."""
 
+import io
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.error
+import urllib.request
 from pathlib import Path
 from unittest.mock import patch
 
@@ -215,6 +218,67 @@ def test_api_model_cache_roundtrip():
     print("[ok] _api_*_cache: roundtrip, TTL, stale fallback, corrupt file tolerated")
 
 
+def test_api_empty_response_is_a_failure():
+    """An empty model message must never be reported as a clean PASS."""
+    import io
+    import run_codex_challenge as m
+
+    body = json.dumps({
+        "choices": [{"message": {"content": "   "}}],
+        "usage": {"total_tokens": 8192, "completion_tokens": 8192,
+                  "completion_tokens_details": {"reasoning_tokens": 8192}},
+    }).encode("utf-8")
+
+    class _Resp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "test-key", "QREV_CHALLENGE_MODEL": "deepseek-v4-pro"}, clear=False):
+        with patch.object(m._API_OPENER, "open", return_value=_Resp(body)):
+            result = m.call_api_llm("deepseek", "prompt")
+    assert not result["success"], "blank content must not count as a successful review"
+    assert "API_EMPTY_RESPONSE" in result["error"]
+    assert "reasoning_tokens=8192" in result["error"]
+    print("[ok] call_api_llm: blank response is a failure, not a silent PASS")
+
+
+def test_api_refuses_redirects():
+    """A 3xx must not re-send the Bearer key to the redirect target."""
+    import run_codex_challenge as m
+
+    handler = m._NoRedirect()
+    req = urllib.request.Request("https://api.deepseek.com/v1/models")
+    try:
+        handler.redirect_request(req, io.BytesIO(b""), 302, "Found", {},
+                                 "https://evil.example/v1/models")
+    except urllib.error.HTTPError as e:
+        assert "refusing redirect" in str(e.reason)
+        assert "evil.example" in str(e.reason)
+    else:
+        raise AssertionError("redirect_request must raise, not follow the redirect")
+    # The opener the API calls actually use must carry that handler.
+    assert any(isinstance(h, m._NoRedirect) for h in m._API_OPENER.handlers)
+    print("[ok] _NoRedirect: key-bearing requests refuse to follow redirects")
+
+
+def test_prompt_frames_diff_as_untrusted_data():
+    """The diff is attacker-controllable, so the prompt must fence it off."""
+    import run_codex_challenge as m
+
+    with patch.object(m.subprocess, "run") as fake_run:
+        fake_run.return_value = subprocess.CompletedProcess([], 0, "diff --git a/x b/x\n", "")
+        prompt = m.build_adversarial_prompt(["x"], "main")
+    assert "UNTRUSTED DATA" in prompt
+    assert "prompt injection" in prompt.lower()
+    # rindex, not index: the boundary text quotes the marker name itself, so
+    # the FIRST "THE DIFF:" is inside the instructions. The real marker is last.
+    assert prompt.index("UNTRUSTED DATA") < prompt.rindex("THE DIFF:")
+    print("[ok] build_adversarial_prompt: diff is fenced as untrusted data")
+
+
 def test_run_codex_challenge_skip_on_missing_binary():
     """Test run_codex_challenge returns skip when no local LLM and no binary."""
     with _no_local_llm():
@@ -263,6 +327,9 @@ def main():
     test_check_api_backend_enabled()
     test_api_pick_best()
     test_api_model_cache_roundtrip()
+    test_api_empty_response_is_a_failure()
+    test_api_refuses_redirects()
+    test_prompt_frames_diff_as_untrusted_data()
     test_run_codex_challenge_skip_on_missing_binary()
     test_run_codex_challenge_skip_on_missing_auth()
 

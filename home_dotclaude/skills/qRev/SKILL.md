@@ -343,7 +343,7 @@ Codex Challenge mode is an **adversarial code reviewer** that actively tries to 
 
 **No paid API key required for the default path.** The runner (`scripts/lib/run_codex_challenge.py`) tries backends in order:
 1. **Local LLM** (auto-detected, no key, free): llama.cpp at `127.0.0.1:8080`, Ollama at `11434`, LM Studio at `1234`. Override with `QREV_LOCAL_LLM_URL`. Any OpenAI-compatible local server works.
-2. **Hosted API** (OPT-IN, needs no binary): set `QREV_CHALLENGE_API=deepseek|openai` and the runner POSTs the adversarial prompt straight to that provider's chat-completions endpoint using `DEEPSEEK_API_KEY` / `OPENAI_API_KEY` (or `CODEX_API_KEY`). The model is the highest-capability one the key can reach — discovered via `/v1/models`, cached 24h in `~/.claude/.qrev_challenge_model_cache.json`, overridable with `QREV_CHALLENGE_MODEL`. **Default OFF on purpose: it spends the user's API credit.**
+2. **Hosted API** (OPT-IN, needs no binary): set `QREV_CHALLENGE_API=deepseek|openai` and the runner POSTs the adversarial prompt straight to that provider's chat-completions endpoint using `DEEPSEEK_API_KEY` / `OPENAI_API_KEY` (or `CODEX_API_KEY`). The model is the highest-capability one the key can reach — discovered via `/v1/models`, cached 24h in `~/.claude/.qrev_challenge_model_cache.json`, overridable with `QREV_CHALLENGE_MODEL`. **Default OFF on purpose, for two reasons: it spends the user's API credit, and it SENDS THE FULL DIFF to a third party.** The local-LLM backend keeps the code on the machine; this one does not. Do not enable it on a repo whose diff cannot leave the network (client code under NDA, secrets in fixtures, regulated data). Reasoning models spend the token budget on hidden reasoning before writing anything, so the ceiling defaults to 32768 (`QREV_CHALLENGE_MAX_TOKENS`); an empty response is reported as a failure, never as a clean PASS.
 3. **Codex CLI** (fallback, requires the `codex` binary on PATH *and* `OPENAI_API_KEY` / `CODEX_API_KEY` / `~/.codex/auth.json`).
 4. **Silent skip** if none is available (does not block the run).
 
@@ -440,6 +440,7 @@ Codex Challenge runs by default (unless `QREV_CODEX_CHALLENGE=0` or binary/auth 
 | `QREV_CHALLENGE_API` | unset (off) | `deepseek` or `openai` — run the challenge against that hosted API with no `codex` binary. **Spends API credit**, so it is opt-in |
 | `QREV_CHALLENGE_MODEL` | unset | Pin the hosted-API model instead of auto-discovering the highest one |
 | `QREV_CHALLENGE_MODEL_REFRESH` | unset | `1` re-discovers the model now, ignoring the 24h cache |
+| `QREV_CHALLENGE_MAX_TOKENS` | `32768` | Output ceiling for the hosted API. Reasoning models burn it on hidden reasoning first — too low returns an empty review (reported as a failure, not a PASS) |
 | `DEEPSEEK_API_KEY` | unset | Key for `QREV_CHALLENGE_API=deepseek` |
 | `CODEX_API_KEY` / `OPENAI_API_KEY` | unset | Key for `QREV_CHALLENGE_API=openai`, and Codex CLI auth (one of these or `~/.codex/auth.json`) |
 | `QREV_CRITIC_TIMEOUT_SEC` | `60` | Timeout for Codex call (override to `300` for Challenge mode's 10-min window) |
