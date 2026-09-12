@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from run_codex_challenge import (
     check_codex_binary,
     check_codex_auth,
+    check_api_backend,
     build_adversarial_prompt,
     parse_codex_jsonl,
     run_codex_challenge,
@@ -128,22 +129,117 @@ def test_parse_local_llm_findings():
     print("[ok] parse_local_llm_findings: extracts [P1]/[P2] and keyword findings")
 
 
+def test_check_api_backend_off_by_default():
+    """Hosted API must stay off unless QREV_CHALLENGE_API names a provider."""
+    for value in ["", "0", "off", "none", "false"]:
+        with patch.dict(os.environ, {"QREV_CHALLENGE_API": value}, clear=False):
+            ok, provider, msg = check_api_backend()
+            assert not ok, f"backend must be off for QREV_CHALLENGE_API={value!r}"
+            assert provider == ""
+            assert "QREV_CHALLENGE_API" in msg
+    print("[ok] check_api_backend: opt-in only, off by default (no silent API spend)")
+
+
+def test_check_api_backend_unknown_provider():
+    """An unrecognised provider name is a clean skip, not a crash."""
+    with patch.dict(os.environ, {"QREV_CHALLENGE_API": "bogus"}, clear=False):
+        ok, provider, msg = check_api_backend()
+        assert not ok
+        assert "unknown" in msg.lower()
+    print("[ok] check_api_backend: unknown provider skips cleanly")
+
+
+def test_check_api_backend_missing_key():
+    """A known provider without its key is a clean skip."""
+    with patch.dict(os.environ, {"QREV_CHALLENGE_API": "deepseek"}, clear=False):
+        os.environ.pop("DEEPSEEK_API_KEY", None)
+        ok, provider, msg = check_api_backend()
+        assert not ok
+        assert provider == "deepseek"
+        assert "DEEPSEEK_API_KEY" in msg
+    print("[ok] check_api_backend: missing key skips cleanly")
+
+
+def test_check_api_backend_enabled():
+    """With provider + key set, the backend reports available."""
+    with patch.dict(
+        os.environ,
+        {"QREV_CHALLENGE_API": "deepseek", "DEEPSEEK_API_KEY": "test-key-not-real"},
+        clear=False,
+    ):
+        ok, provider, msg = check_api_backend()
+        assert ok
+        assert provider == "deepseek"
+    print("[ok] check_api_backend: enables when provider + key are both present")
+
+
+def test_api_pick_best():
+    """Model discovery picks the highest-priority family, stable alias first."""
+    import run_codex_challenge as m
+
+    assert m._api_pick_best("deepseek", ["deepseek-chat", "deepseek-reasoner"]) == "deepseek-reasoner"
+    assert m._api_pick_best("deepseek", ["deepseek-chat"]) == "deepseek-chat"
+    assert m._api_pick_best("deepseek", ["something-else"]) is None
+    # Stable alias beats a dated snapshot of the same family.
+    assert m._api_pick_best("openai", ["gpt-5-2026-01-01", "gpt-5", "gpt-4o"]) == "gpt-5"
+    # No stable alias -> latest dated snapshot wins.
+    assert m._api_pick_best("openai", ["gpt-5-2025-07-15", "gpt-5-2026-01-01"]) == "gpt-5-2026-01-01"
+    print("[ok] _api_pick_best: highest family wins, stable alias preferred")
+
+
+def test_api_model_cache_roundtrip():
+    """Cache write/read roundtrips, and a stale entry is only served on demand."""
+    import run_codex_challenge as m
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        original = m._API_MODEL_CACHE
+        m._API_MODEL_CACHE = Path(tmpdir) / "cache.json"
+        try:
+            assert m._api_read_cache("deepseek") is None  # missing file
+            m._api_write_cache("deepseek", "deepseek-chat")
+            assert m._api_read_cache("deepseek") == "deepseek-chat"
+            assert m._api_read_cache("openai") is None  # other provider untouched
+
+            # Age it past the TTL: fresh read misses, stale read still serves.
+            aged = json.loads(m._API_MODEL_CACHE.read_text(encoding="utf-8"))
+            aged["deepseek"]["fetched_at"] -= (m._API_CACHE_TTL_HOURS + 1) * 3600
+            m._API_MODEL_CACHE.write_text(json.dumps(aged), encoding="utf-8")
+            assert m._api_read_cache("deepseek") is None
+            assert m._api_read_cache("deepseek", allow_stale=True) == "deepseek-chat"
+
+            # A corrupt cache file must never raise.
+            m._API_MODEL_CACHE.write_text("{not json", encoding="utf-8")
+            assert m._api_read_cache("deepseek") is None
+        finally:
+            m._API_MODEL_CACHE = original
+    print("[ok] _api_*_cache: roundtrip, TTL, stale fallback, corrupt file tolerated")
+
+
 def test_run_codex_challenge_skip_on_missing_binary():
     """Test run_codex_challenge returns skip when no local LLM and no binary."""
     with _no_local_llm():
-        with patch("shutil.which", return_value=None):
-            result = run_codex_challenge(["test.txt"], "main")
-            assert not result["success"]
-            assert "no local LLM" in result["skip_reason"]
-            assert "CODEX_CLI_MISSING" in result["error"]
+        with patch.dict(os.environ, {"QREV_CHALLENGE_API": ""}, clear=False):
+            with patch("shutil.which", return_value=None):
+                result = run_codex_challenge(["test.txt"], "main")
+                assert not result["success"]
+                assert "no local LLM" in result["skip_reason"]
+                assert "CODEX_CLI_MISSING" in result["error"]
+                assert "API_UNAVAILABLE" in result["error"]
     print("[ok] run_codex_challenge: skips gracefully when no local LLM and binary missing")
 
 
 def test_run_codex_challenge_skip_on_missing_auth():
     """Test run_codex_challenge returns skip when no local LLM and no auth."""
+    # Patch check_codex_binary itself, not shutil.which: on Windows the probe
+    # runs `codex --version` through cmd.exe, so a faked which() path still
+    # reports the binary as missing and we would never reach the auth branch.
     with _no_local_llm():
-        with patch("shutil.which", return_value="/fake/codex"):
-            with patch.dict(os.environ, {"CODEX_HOME": "/nonexistent"}, clear=False):
+        with patch("run_codex_challenge.check_codex_binary", return_value=(True, "fake codex 1.0")):
+            with patch.dict(
+                os.environ,
+                {"CODEX_HOME": "/nonexistent", "QREV_CHALLENGE_API": ""},
+                clear=False,
+            ):
                 for key in ["CODEX_API_KEY", "OPENAI_API_KEY"]:
                     os.environ.pop(key, None)
                 result = run_codex_challenge(["test.txt"], "main")
@@ -161,6 +257,12 @@ def main():
     test_p1_p2_classification()
     test_check_local_llm_no_server()
     test_parse_local_llm_findings()
+    test_check_api_backend_off_by_default()
+    test_check_api_backend_unknown_provider()
+    test_check_api_backend_missing_key()
+    test_check_api_backend_enabled()
+    test_api_pick_best()
+    test_api_model_cache_roundtrip()
     test_run_codex_challenge_skip_on_missing_binary()
     test_run_codex_challenge_skip_on_missing_auth()
 

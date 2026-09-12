@@ -116,7 +116,7 @@ REVIEW DEPTH (mandatory): The SCOPE files are what CHANGED, not the limit of wha
 
 If a `topic:<name>` arg was passed, the agent roster is **NOT** filtered — every pass still runs its complete roster. The topic only changes *emphasis*: tell the agents the named lens (security / db / perf / ml / tests) is the priority focus for this run, and order/highlight the topic-relevant findings first in the synthesis. You still get the full 3-pass coverage; topic just foregrounds one lens in the report. See the argument-forms table below.
 
-**Run the COMPLETE roster — every agent, every pass. This is non-negotiable, with no exceptions.** Every `/qRev` (including `topic:<name>`) runs the **full roster across all three passes — every applicable agent, up to the hard cap of 15 parallel agents per pass** (Pass 1 quality/correctness, Pass 2 security, Pass 3 architecture+DB+perf+tests, per `/rev`'s "`/rev exhaustive` (3-pass)" list). **Codex Challenge is a permanent Pass 2 member — it runs in every `/qRev` as an adversarial security agent, subject to the same concurrency cap. It silently skips only when the `codex` binary or auth is unavailable; disable explicitly with `QREV_CODEX_CHALLENGE=0`.** Dispatch the full roster for each pass. Do **not** silently drop, sample, narrow, or "pick a few representative" agents — not to save time, not for a topic, not for any reason. The roster is bound together: it runs whole or the run is invalid.
+**Run the COMPLETE roster — every agent, every pass. This is non-negotiable, with no exceptions.** Every `/qRev` (including `topic:<name>`) runs the **full roster across all three passes — every applicable agent, up to the hard cap of 15 parallel agents per pass** (Pass 1 quality/correctness, Pass 2 security, Pass 3 architecture+DB+perf+tests, per `/rev`'s "`/rev exhaustive` (3-pass)" list). **Codex Challenge is a permanent Pass 2 member — it runs in every `/qRev` as an adversarial security agent, subject to the same concurrency cap. It silently skips only when NONE of its three backends is reachable (local LLM, opt-in hosted API, Codex CLI — check with `run_codex_challenge.py --probe`); disable explicitly with `QREV_CODEX_CHALLENGE=0`.** Dispatch the full roster for each pass. Do **not** silently drop, sample, narrow, or "pick a few representative" agents — not to save time, not for a topic, not for any reason. The roster is bound together: it runs whole or the run is invalid.
 
 **Additional permanent roster members (always run, all passes where applicable):**
 
@@ -126,7 +126,14 @@ If a `topic:<name>` arg was passed, the agent roster is **NOT** filtered — eve
 
 These are permanent additions to the roster. They count toward the 15-agent-per-pass cap. They follow the same whole-file + context depth directive as all other agents. If a skill file is missing (e.g. on a fresh clone before `restore_claude_config.ps1` has run), silently skip the agent and record it under "Coverage gaps" -- do not error out the whole qRev run.
 
-**Built-in `/code-review` adjunct (always-on, subscription-covered, OUTSIDE the fleet).** Alongside the Phase B fleet (launch it with wave 1), invoke the harness's built-in code review via the Skill tool (`skill: "review"`). Per the official docs it runs as a background subagent with its own context window and is accounted as normal session usage — included in the subscription, so it is always-on. It does NOT count toward the 15-agent cap and never substitutes for any roster member — it is additive, a genuinely independent official lens on the same uncommitted diff. Its findings (typically reported via the ReportFindings tool) enter the final synthesis with attribution `[builtin:code-review]`: de-dupe by `file:line`, count as +1 consensus vote, map CONFIRMED verdicts one severity tier up like other verified findings. If the `review` skill is unavailable in the environment, silently skip and record `builtin code-review: unavailable` under "Coverage gaps". Kill switch: `QREV_BUILTIN_REVIEW=0`. **`/code-review ultra` is explicitly NOT part of qRev**: it is credit-billed separately (not subscription usage; typically $5-25/run after the 3 free Pro/Max runs) and strictly user-triggered — the model must never attempt to launch it. For very large or high-stakes merges the report MAY end with a one-line recommendation that the user run `/code-review ultra` themselves; that is the full extent of the integration.
+**Built-in review adjunct (always-on, subscription-covered, OUTSIDE the fleet).** Alongside the Phase B fleet (launch it with wave 1), invoke the harness's built-in reviewer via the Skill tool. **Pick the skill by SCOPE — this is the whole point, and getting it wrong is why the adjunct used to report itself "unavailable":**
+
+- **Working diff (the normal qRev scope) -> `skill: "security-review"`.** Its own definition is *"Complete a security review of the pending changes on the current branch"* — it reviews the local pending changes, needs only a git repo, no GitHub remote, no PR, no `gh` binary. It spawns its own sub-tasks and runs a false-positive filter (drops findings below confidence 8) before reporting. Attribution: `[builtin:security-review]`.
+- **PR scope only (`PR#` argument) -> `skill: "review"`.** That skill is GitHub-PR-scoped *by design* — its description is literally *"Review a GitHub pull request; for your working diff use /code-review"*, its argument hint is `[pr number]`, and its prompt states *"The PR's diff is the only review scope — local working-tree changes are out of scope."* It shells out to `gh pr view` / `gh pr diff`, so it also needs the `gh` CLI on PATH. Never invoke it for a working-diff qRev: with no PR number it cannot see the changes under review. Attribution: `[builtin:review]`.
+
+Either way the adjunct runs as a background subagent with its own context window, accounted as normal session usage — included in the subscription, so it is always-on. It does NOT count toward the 15-agent cap and never substitutes for any roster member — it is additive, a genuinely independent official lens on the same scope. Its findings (typically reported via the ReportFindings tool) enter the final synthesis with the attribution above: de-dupe by `file:line`, count as +1 consensus vote, map CONFIRMED verdicts one severity tier up like other verified findings. If the chosen skill is unavailable in the environment (or PR scope with no `gh` on PATH), silently skip and record `builtin review: unavailable (<reason>)` under "Coverage gaps". Kill switch: `QREV_BUILTIN_REVIEW=0`.
+
+**`/code-review` is user-typed, not model-invocable.** The harness's general-quality working-diff reviewer is the `/code-review [low|medium|high|max] [--fix] [--comment] [<target>]` command — with no target it reviews the current diff, which is exactly qRev's scope. It is NOT exposed to the model as a Skill, so qRev cannot launch it; only the user can type it. `security-review` is therefore the model-invocable working-diff adjunct, and the report MAY end with a one-line suggestion that the user run `/code-review high` (or, for very large / high-stakes merges, `/code-review ultra`) themselves. **`/code-review ultra` is explicitly NOT part of qRev**: it is credit-billed separately (not subscription usage; typically $5-25/run after the 3 free Pro/Max runs) and strictly user-triggered — the model must never attempt to launch it. That one-line recommendation is the full extent of the integration.
 
 **Any hand-picked subset of the roster is a VIOLATION — there is no longer ANY sanctioned way to run fewer agents.** If you catch yourself about to launch "qRev fleet (3 lenses)" — e.g. just security + typescript + code-reviewer — stop: that is a plain `/rev`, not `/qRev`. The whole point of `/qRev` is the full multi-pass coverage. The old `fast` mode (Phase A only, no fleet) and the old `topic:`-narrowing behaviour have both been removed precisely so the fleet can never be reduced: `fast` no longer exists, and `topic:` keeps the entire roster. Launch the roster in **batched waves** (see "Batched execution" right below) — every agent still runs, just not all 15 in one simultaneous burst. A missing agent is a missing lens, and an incomplete fleet means the qRev did not actually run — re-launch the missing agents rather than reporting on a partial fleet.
 
@@ -180,7 +187,7 @@ Merge **all three phases** into one fused report using `/rev`'s "Synthesis" rule
 - Phase 0 "Pass-with-notes" map to **P2/P3** (nits / warnings).
 - The Phase-0 result line appears in the report header alongside the agent verdicts.
 - **Codex Challenge always runs in Pass 2** (unless skipped due to missing binary/auth or `QREV_CODEX_CHALLENGE=0`): Codex findings enter the consensus with attribution `[codex:challenge]`. `[P1]` markers map to P0/P1, `[P2]` to P2/P3. Cross-model consensus section is added when ≥2 providers (Claude + Codex + OpenAI/DeepSeek) are active: findings cited by ≥2 PROVIDERS get `[X-MODEL]` badge and one severity tier up.
-- **Built-in `/code-review` adjunct findings** enter with attribution `[builtin:code-review]` and count as +1 consensus vote per matching `file:line` (agent-level vote, NOT provider-level: the builtin reviewer also runs on Claude, so builtin+fleet agreement alone never earns the `[X-MODEL]` badge). Its CONFIRMED-verdict findings map one severity tier up, like other verified findings.
+- **Built-in review adjunct findings** enter with attribution `[builtin:security-review]` (working diff) or `[builtin:review]` (PR scope) and count as +1 consensus vote per matching `file:line` (agent-level vote, NOT provider-level: the builtin reviewer also runs on Claude, so builtin+fleet agreement alone never earns the `[X-MODEL]` badge). Its CONFIRMED-verdict findings map one severity tier up, like other verified findings.
 - **Cross-model comparison** (extends gstack pattern): When both Claude `/review` and Codex ran, add to report:
   ```
   CROSS-MODEL ANALYSIS:
@@ -334,10 +341,19 @@ If one of the paid keys is missing or its account is empty, that provider gets s
 
 Codex Challenge mode is an **adversarial code reviewer** that actively tries to break your code — finding edge cases, race conditions, security holes, resource leaks, and silent data corruption paths that normal reviews miss. It runs as a permanent additional agent in **Phase B Pass 2 (security-focused)** on every `/qRev`.
 
-**No paid API key required.** The runner (`scripts/lib/run_codex_challenge.py`) tries backends in order:
-1. **Local LLM** (auto-detected, no key): llama.cpp at `127.0.0.1:8080`, Ollama at `11434`, LM Studio at `1234`. Override with `QREV_LOCAL_LLM_URL`. Any OpenAI-compatible local server works.
-2. **Codex CLI** (fallback, requires `OPENAI_API_KEY` or `CODEX_API_KEY` or `~/.codex/auth.json`).
-3. **Silent skip** if neither is available (does not block the run).
+**No paid API key required for the default path.** The runner (`scripts/lib/run_codex_challenge.py`) tries backends in order:
+1. **Local LLM** (auto-detected, no key, free): llama.cpp at `127.0.0.1:8080`, Ollama at `11434`, LM Studio at `1234`. Override with `QREV_LOCAL_LLM_URL`. Any OpenAI-compatible local server works.
+2. **Hosted API** (OPT-IN, needs no binary): set `QREV_CHALLENGE_API=deepseek|openai` and the runner POSTs the adversarial prompt straight to that provider's chat-completions endpoint using `DEEPSEEK_API_KEY` / `OPENAI_API_KEY` (or `CODEX_API_KEY`). The model is the highest-capability one the key can reach — discovered via `/v1/models`, cached 24h in `~/.claude/.qrev_challenge_model_cache.json`, overridable with `QREV_CHALLENGE_MODEL`. **Default OFF on purpose: it spends the user's API credit.**
+3. **Codex CLI** (fallback, requires the `codex` binary on PATH *and* `OPENAI_API_KEY` / `CODEX_API_KEY` / `~/.codex/auth.json`).
+4. **Silent skip** if none is available (does not block the run).
+
+Diagnose which backends are live *before* blaming the run — this is a free, read-only probe that makes no API call:
+
+```
+python ~/.claude/scripts/lib/run_codex_challenge.py --probe
+```
+
+It prints one line per backend plus `=> adversarial review would RUN / SKIP`. When Codex Challenge lands under "Coverage gaps", quote the probe's reason rather than the bare "binary not installed" — the binary is only one of three paths.
 
 Kill switch: `QREV_CODEX_CHALLENGE=0`.
 
@@ -420,13 +436,20 @@ Codex Challenge runs by default (unless `QREV_CODEX_CHALLENGE=0` or binary/auth 
 |---|---|---|
 | `QREV_CRITIC_PROVIDERS` | `claude` | Add `openai`/`deepseek` for cross-model critic (Codex is now always-on, not controlled here) |
 | `QREV_CODEX_CHALLENGE` | `1` | Set to `0` to disable Codex Challenge (e.g., no key, CI environment, cost control) |
-| `CODEX_API_KEY` / `OPENAI_API_KEY` | unset | Required for Codex auth (one of these or `~/.codex/auth.json`); if missing, Codex silently skips |
+| `QREV_LOCAL_LLM_URL` | unset | Override local-LLM autodetect (any OpenAI-compatible base URL). Free backend, tried first |
+| `QREV_CHALLENGE_API` | unset (off) | `deepseek` or `openai` — run the challenge against that hosted API with no `codex` binary. **Spends API credit**, so it is opt-in |
+| `QREV_CHALLENGE_MODEL` | unset | Pin the hosted-API model instead of auto-discovering the highest one |
+| `QREV_CHALLENGE_MODEL_REFRESH` | unset | `1` re-discovers the model now, ignoring the 24h cache |
+| `DEEPSEEK_API_KEY` | unset | Key for `QREV_CHALLENGE_API=deepseek` |
+| `CODEX_API_KEY` / `OPENAI_API_KEY` | unset | Key for `QREV_CHALLENGE_API=openai`, and Codex CLI auth (one of these or `~/.codex/auth.json`) |
 | `QREV_CRITIC_TIMEOUT_SEC` | `60` | Timeout for Codex call (override to `300` for Challenge mode's 10-min window) |
 
 ### Kill switch / silent skip
 
+- If no local LLM, no opt-in hosted API, and no Codex binary → silently skip; the error names all three (`LOCAL_LLM_UNAVAILABLE + API_UNAVAILABLE (...) + CODEX_CLI_MISSING: ...`)
 - If Codex binary not found → silently skip, log `codex_cli_missing`
 - If auth missing → silently skip, log `codex_auth_failed`
+- If the hosted API returns 402 / 429 `insufficient_quota` (empty balance) → the error carries the provider's message and the run falls through to the Codex CLI, then skips. Top up the account or switch `QREV_CHALLENGE_API` to the other provider
 - If timeout (exit 124) → surface actionable message, log `codex_timeout`
 - If non-zero exit → surface stderr, log `codex_nonzero_exit`
 - `AI_RADAR_DISABLE=1` does NOT affect Codex (Radar is separate gate)
@@ -464,7 +487,7 @@ Rules when assigning models to the fleet (via each Task's `model` field):
 - Do not skip the synthesis report and jump straight to fixing — the user wants to SEE the report first, then watch the fixes apply. Report THEN fix, not fix THEN report.
 - Do not run Phase B if Phase A is SHIP-BLOCK — no point burning 15–30 min of agent wall-clock on broken code; user fixes Phase A blockers first.
 - Do not run Phase 0 twice "for safety" if the diff hasn't changed. (Same as `/qMin`'s rule.)
-- Do not invoke the Skill tool for `qMin` or `rev` — read their SKILL.md and execute the instructions inline. Avoids nested-skill machinery. (The built-in `review` skill is the ONE sanctioned exception — it is designed to be invoked via the Skill tool and runs as its own background subagent; see the "/code-review adjunct" block.)
+- Do not invoke the Skill tool for `qMin` or `rev` — read their SKILL.md and execute the instructions inline. Avoids nested-skill machinery. (The built-in review adjunct — `security-review` for a working diff, `review` for PR scope — is the ONE sanctioned exception: those are designed to be invoked via the Skill tool and run as their own background subagent; see the "Built-in review adjunct" block.)
 - Do not run on a 1-file change — fall back to `/qMin` and tell the user. (Same as `/rev`'s rule.)
 
 ## Auto-mode (PostToolUse counter + UserPromptSubmit injector)
